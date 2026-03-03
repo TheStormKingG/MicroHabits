@@ -1,0 +1,45 @@
+import type { JSX } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { ScheduleProvider } from './contexts/ScheduleContext';
+import { TasksProvider } from './contexts/TasksContext';
+import { BottomNav } from './components/BottomNav';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { DashboardPage } from './pages/DashboardPage';
+import { SchedulePage } from './pages/SchedulePage';
+import { TasksPage } from './pages/TasksPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { useNotificationScheduler } from './hooks/useNotificationScheduler';
+
+function AppInner(): JSX.Element {
+  useNotificationScheduler();
+  return (
+    <div className="flex flex-col h-full bg-slate-950 max-w-lg mx-auto relative">
+      <div className="flex-1 overflow-hidden pb-16">
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/schedule" element={<SchedulePage />} />
+            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<DashboardPage />} />
+          </Routes>
+        </ErrorBoundary>
+      </div>
+      <BottomNav />
+    </div>
+  );
+}
+
+export default function App(): JSX.Element {
+  return (
+    <BrowserRouter>
+      <ErrorBoundary>
+        <ScheduleProvider>
+          <TasksProvider>
+            <AppInner />
+          </TasksProvider>
+        </ScheduleProvider>
+      </ErrorBoundary>
+    </BrowserRouter>
+  );
+}

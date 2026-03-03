@@ -1,0 +1,18 @@
+{
+  "rangeDays": 30,
+  "xKey": "date",
+  "yKey": "completionPct",
+  "yDomain": [0, 100],
+  "title": "30-Day Completion Trend",
+  "series": [
+    {
+      "key": "completionPct",
+      "label": "Completion (%)",
+      "color": "#6366f1",
+      "strokeWidth": 2
+    }
+  ],
+  "referenceLines": [
+    { "y": 80, "label": "Target 80%", "color": "#22c55e" }
+  ]
+}

@@ -1,0 +1,167 @@
+[
+  {
+    "id": "wake",
+    "time": "04:30",
+    "label": "Wake",
+    "doText": "10 sit-ups, 10 leg-ups",
+    "say": [
+      "My body is strong and energized.",
+      "My mind is calm and clear.",
+      "Today I will make progress toward my goals."
+    ]
+  },
+  {
+    "id": "brush",
+    "time": "05:30",
+    "label": "Brush",
+    "doText": "10 squats",
+    "say": [
+      "My legs are powerful and grounded.",
+      "I am grateful for this new morning.",
+      "I commit to small daily improvements."
+    ]
+  },
+  {
+    "id": "coffee",
+    "time": "06:00",
+    "label": "Coffee",
+    "doText": "Write Daily Task List",
+    "say": [
+      "I nourish my body with intention.",
+      "I am focused and ready to plan my day.",
+      "I prioritize what matters most."
+    ]
+  },
+  {
+    "id": "car1",
+    "time": "07:30",
+    "label": "In Car (1)",
+    "doText": "Isometric Pelvic Floor",
+    "say": [
+      "My core is stable and supported.",
+      "I use every moment to build strength.",
+      "I am consistent in my discipline."
+    ]
+  },
+  {
+    "id": "park1",
+    "time": "08:00",
+    "label": "Parking (1)",
+    "doText": "Isometric Abdominals",
+    "say": [
+      "My abdomen is strong and engaged.",
+      "I arrive with energy and purpose.",
+      "I show up fully for today's work."
+    ]
+  },
+  {
+    "id": "keynaan",
+    "time": "12:00",
+    "label": "Keynaan",
+    "doText": "Isometric Shoulders",
+    "say": [
+      "My shoulders carry strength, not tension.",
+      "I release midday stress with breath.",
+      "I am halfway to completing my day."
+    ]
+  },
+  {
+    "id": "car2",
+    "time": "12:45",
+    "label": "In Car (2)",
+    "doText": "Isometric Pelvic Floor",
+    "say": [
+      "My core remains steady throughout the day.",
+      "I use transitions to reset and recharge.",
+      "I stay on track with my commitments."
+    ]
+  },
+  {
+    "id": "park2",
+    "time": "13:15",
+    "label": "Parking (2)",
+    "doText": "Isometric Abdominals",
+    "say": [
+      "My body grows stronger with each rep.",
+      "I return with renewed focus and clarity.",
+      "Every small action compounds over time."
+    ]
+  },
+  {
+    "id": "car3",
+    "time": "16:00",
+    "label": "In Car (3)",
+    "doText": "Isometric Shoulders",
+    "say": [
+      "My posture reflects my inner strength.",
+      "I release the day's tension mindfully.",
+      "I am proud of the work I've done today."
+    ]
+  },
+  {
+    "id": "ebrf",
+    "time": "16:30",
+    "label": "EBRF",
+    "doText": "10 squats",
+    "say": [
+      "My legs carry me forward with power.",
+      "I transition into my evening with gratitude.",
+      "I honour the end of my work with movement."
+    ]
+  },
+  {
+    "id": "yard",
+    "time": "17:30",
+    "label": "Yard",
+    "doText": "Walk barefoot 15 minutes",
+    "say": [
+      "I am grounded and connected to the earth.",
+      "Nature restores my mind and spirit.",
+      "I invest in my long-term wellbeing."
+    ]
+  },
+  {
+    "id": "read",
+    "time": "20:00",
+    "label": "Read",
+    "doText": "10 sit-ups, 10 leg-ups",
+    "say": [
+      "My body is winding down with grace.",
+      "I feed my mind with wisdom each evening.",
+      "I am building the life I envision."
+    ]
+  },
+  {
+    "id": "water",
+    "time": "20:45",
+    "label": "Water",
+    "doText": "Review Daily Task List",
+    "say": [
+      "I hydrate and care for this body.",
+      "I reflect on today with honesty and kindness.",
+      "I celebrate what I accomplished today."
+    ]
+  },
+  {
+    "id": "meditate",
+    "time": "21:00",
+    "label": "Meditate",
+    "doText": "Write Tomorrow's Task List",
+    "say": [
+      "My breath steadies my nervous system.",
+      "I am at peace with this moment.",
+      "I set clear intentions for tomorrow."
+    ]
+  },
+  {
+    "id": "sleep",
+    "time": "21:30",
+    "label": "Sleep",
+    "doText": "Relax all muscles",
+    "say": [
+      "I release all tension from my body.",
+      "I am grateful for this day.",
+      "Tomorrow I will be even better."
+    ]
+  }
+]

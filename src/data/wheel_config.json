@@ -1,0 +1,26 @@
+{
+  "daysInView": 30,
+  "startAngleDeg": -90,
+  "gapDeg": 1,
+  "innerRadius": 50,
+  "ringThickness": 8,
+  "ringGap": 1,
+  "dayLabelRadius": 205,
+  "habits": [
+    { "id": "wake",     "label": "Wake",        "time": "04:30", "color": "#6366f1" },
+    { "id": "brush",    "label": "Brush",       "time": "05:30", "color": "#8b5cf6" },
+    { "id": "coffee",   "label": "Coffee",      "time": "06:00", "color": "#a855f7" },
+    { "id": "car1",     "label": "In Car (1)",  "time": "07:30", "color": "#ec4899" },
+    { "id": "park1",    "label": "Parking (1)", "time": "08:00", "color": "#f43f5e" },
+    { "id": "keynaan",  "label": "Keynaan",     "time": "12:00", "color": "#ef4444" },
+    { "id": "car2",     "label": "In Car (2)",  "time": "12:45", "color": "#f97316" },
+    { "id": "park2",    "label": "Parking (2)", "time": "13:15", "color": "#eab308" },
+    { "id": "car3",     "label": "In Car (3)",  "time": "16:00", "color": "#84cc16" },
+    { "id": "ebrf",     "label": "EBRF",        "time": "16:30", "color": "#22c55e" },
+    { "id": "yard",     "label": "Yard",        "time": "17:30", "color": "#10b981" },
+    { "id": "read",     "label": "Read",        "time": "20:00", "color": "#14b8a6" },
+    { "id": "water",    "label": "Water",       "time": "20:45", "color": "#06b6d4" },
+    { "id": "meditate", "label": "Meditate",    "time": "21:00", "color": "#3b82f6" },
+    { "id": "sleep",    "label": "Sleep",       "time": "21:30", "color": "#0ea5e9" }
+  ]
+}
