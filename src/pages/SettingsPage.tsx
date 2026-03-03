@@ -23,6 +23,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { exportAllData, importAllData, deleteAllData } from '../db/database';
 import { fullSync } from '../lib/syncService';
 import {
+  isPushSupported,
+  subscribeToPush,
+  unsubscribeFromPush,
+  updatePushSchedule,
+} from '../lib/pushService';
+import {
   requestNotificationPermission,
   sendTestNotification,
   canUseNotifications,
@@ -86,12 +92,15 @@ export function SettingsPage(): JSX.Element {
       };
       await updateSettings(newSettings);
       scheduleNotificationsForToday(slots, newSettings.notifications);
+      // Register Web Push subscription (works on iOS 16.4+ PWA + Android)
+      void subscribeToPush(user?.id ?? null, slots, newSettings.notifications);
     } else {
       const newSettings: AppSettings = {
         ...settings,
         notifications: { ...notif, enabled: false },
       };
       await updateSettings(newSettings);
+      void unsubscribeFromPush();
     }
   };
 
@@ -101,6 +110,8 @@ export function SettingsPage(): JSX.Element {
       notifications: { ...notif, minutesBefore: minutes },
     };
     await updateSettings(newSettings);
+    // Keep server-side schedule in sync
+    void updatePushSchedule(slots, newSettings.notifications);
   };
 
   const handleExport = async () => {
@@ -292,16 +303,25 @@ export function SettingsPage(): JSX.Element {
               </div>
             )}
 
-            {/* Limitations notice */}
-            <div className="bg-slate-700/30 rounded-lg p-3 text-xs text-slate-400 space-y-1.5 leading-relaxed">
-              <p className="font-semibold text-slate-300">How notifications work</p>
-              <ul className="list-disc list-inside space-y-1">
-                <li>Reminders fire using <code className="text-indigo-400">setTimeout</code> while the app is open.</li>
-                <li>If the app is closed, notifications may not fire (browser/OS limitation).</li>
-                <li>For reliable reminders, add the app to your home screen (PWA) and keep it open in the background.</li>
-                <li>A calendar (.ics) export is available below as a fallback.</li>
-              </ul>
-            </div>
+            {/* Push support badge */}
+            {isPushSupported() ? (
+              <div className="flex items-center gap-2 bg-green-950/40 border border-green-700/40 rounded-lg p-3 text-xs text-green-300">
+                <CheckCircle2 size={13} className="flex-shrink-0" />
+                <span>
+                  <strong>Background push supported</strong> — notifications will arrive even when
+                  the app is closed (iOS 16.4+ / Android).
+                </span>
+              </div>
+            ) : (
+              <div className="bg-slate-700/30 rounded-lg p-3 text-xs text-slate-400 space-y-1.5 leading-relaxed">
+                <p className="font-semibold text-slate-300">How notifications work</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Reminders fire while the app is open in the foreground.</li>
+                  <li>For background reminders, install the app on your home screen (PWA) and open it at least once daily.</li>
+                  <li>A calendar (.ics) export is available below as a fallback.</li>
+                </ul>
+              </div>
+            )}
 
             {/* Toggle */}
             <div className="flex items-center justify-between">
