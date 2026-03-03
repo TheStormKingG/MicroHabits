@@ -53,10 +53,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
 
   const signInWithGoogle = useCallback(async () => {
     if (!supabase) return;
+    // Redirect back to the app root (e.g. /MicroHabits/ on GitHub Pages, / in dev).
+    // Using BASE_URL ensures the hash with the access token lands on a page the app renders.
+    const redirectTo = window.location.origin + import.meta.env.BASE_URL;
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin + window.location.pathname,
+        redirectTo,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
