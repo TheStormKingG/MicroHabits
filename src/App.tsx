@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
 import { ScheduleProvider } from './contexts/ScheduleContext';
 import { TasksProvider } from './contexts/TasksContext';
 import { BottomNav } from './components/BottomNav';
@@ -34,11 +35,13 @@ export default function App(): JSX.Element {
   return (
     <BrowserRouter>
       <ErrorBoundary>
-        <ScheduleProvider>
-          <TasksProvider>
-            <AppInner />
-          </TasksProvider>
-        </ScheduleProvider>
+        <AuthProvider>
+          <ScheduleProvider>
+            <TasksProvider>
+              <AppInner />
+            </TasksProvider>
+          </ScheduleProvider>
+        </AuthProvider>
       </ErrorBoundary>
     </BrowserRouter>
   );

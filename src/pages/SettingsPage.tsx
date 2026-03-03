@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { JSX } from 'react';
 import { format } from 'date-fns';
 import {
@@ -12,9 +12,16 @@ import {
   ChevronUp,
   AlertTriangle,
   CheckCircle2,
+  Cloud,
+  CloudOff,
+  LogOut,
+  RefreshCw,
+  User,
 } from 'lucide-react';
 import { useSchedule } from '../contexts/ScheduleContext';
+import { useAuth } from '../contexts/AuthContext';
 import { exportAllData, importAllData, deleteAllData } from '../db/database';
+import { fullSync } from '../lib/syncService';
 import {
   requestNotificationPermission,
   sendTestNotification,
@@ -30,15 +37,31 @@ import {
 import { PageShell } from '../components/PageShell';
 import type { AppSettings } from '../types';
 
-type Section = 'notifications' | 'data' | 'privacy';
+type Section = 'account' | 'notifications' | 'data' | 'privacy';
 
 export function SettingsPage(): JSX.Element {
   const { settings, updateSettings, slots, refresh } = useSchedule();
-  const [openSection, setOpenSection] = useState<Section | null>('notifications');
+  const { user, isLoading: authLoading, isSupabaseEnabled, signInWithGoogle, signOut } = useAuth();
+  const [openSection, setOpenSection] = useState<Section | null>('account');
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Full sync whenever the user signs in
+  useEffect(() => {
+    if (user) {
+      setSyncStatus('syncing');
+      fullSync(user.id)
+        .then(() => {
+          setSyncStatus('done');
+          void refresh();
+          setTimeout(() => setSyncStatus('idle'), 3000);
+        })
+        .catch(() => setSyncStatus('error'));
+    }
+  }, [user, refresh]);
 
   const toggleSection = (s: Section) =>
     setOpenSection((cur) => (cur === s ? null : s));
@@ -112,9 +135,143 @@ export function SettingsPage(): JSX.Element {
     alert('All data has been deleted.');
   };
 
+  const handleManualSync = async () => {
+    if (!user) return;
+    setSyncStatus('syncing');
+    try {
+      await fullSync(user.id);
+      await refresh();
+      setSyncStatus('done');
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    } catch {
+      setSyncStatus('error');
+    }
+  };
+
   return (
     <PageShell title="Settings">
       <div className="space-y-3">
+
+        {/* ── Account / Cloud Sync ── */}
+        <SettingsSection
+          id="account"
+          title="Account & Cloud Sync"
+          icon={user ? Cloud : CloudOff}
+          open={openSection === 'account'}
+          onToggle={() => toggleSection('account')}
+        >
+          {!isSupabaseEnabled ? (
+            <div className="text-xs text-slate-400 space-y-2">
+              <p className="text-slate-300 font-semibold">Cloud sync not configured</p>
+              <p>
+                Add <code className="text-indigo-400">VITE_SUPABASE_URL</code> and{' '}
+                <code className="text-indigo-400">VITE_SUPABASE_ANON_KEY</code> to your{' '}
+                <code className="text-indigo-400">.env.local</code> file to enable cross-device
+                sync. Your data remains local-only until then.
+              </p>
+            </div>
+          ) : authLoading ? (
+            <div className="flex justify-center py-4">
+              <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : user ? (
+            <div className="space-y-4">
+              {/* Signed-in state */}
+              <div className="flex items-center gap-3 p-3 bg-slate-700/50 rounded-lg">
+                <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0">
+                  <User size={16} className="text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-200 font-medium truncate">
+                    {user.user_metadata?.['full_name'] ?? 'Signed in'}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                </div>
+                <span className="ml-auto flex items-center gap-1 text-xs text-green-400 flex-shrink-0">
+                  <Cloud size={12} /> Synced
+                </span>
+              </div>
+
+              {/* Sync status */}
+              {syncStatus !== 'idle' && (
+                <div
+                  className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${
+                    syncStatus === 'syncing'
+                      ? 'bg-indigo-950/40 text-indigo-300'
+                      : syncStatus === 'done'
+                      ? 'bg-green-950/40 text-green-400'
+                      : 'bg-red-950/40 text-red-400'
+                  }`}
+                >
+                  {syncStatus === 'syncing' && (
+                    <RefreshCw size={12} className="animate-spin flex-shrink-0" />
+                  )}
+                  {syncStatus === 'done' && <CheckCircle2 size={12} className="flex-shrink-0" />}
+                  {syncStatus === 'error' && <AlertTriangle size={12} className="flex-shrink-0" />}
+                  {syncStatus === 'syncing'
+                    ? 'Syncing your data…'
+                    : syncStatus === 'done'
+                    ? 'All data synced successfully.'
+                    : 'Sync failed. Check your connection.'}
+                </div>
+              )}
+
+              {/* Manual sync */}
+              <button
+                onClick={() => void handleManualSync()}
+                disabled={syncStatus === 'syncing'}
+                className="w-full flex items-center gap-2 justify-center py-2.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 rounded-lg text-sm text-slate-200 transition-colors"
+              >
+                <RefreshCw size={14} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />
+                Sync now
+              </button>
+
+              {/* Sign out */}
+              <button
+                onClick={() => void signOut()}
+                className="w-full flex items-center gap-2 justify-center py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm text-red-400 transition-colors"
+              >
+                <LogOut size={14} />
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Sign in to sync your habits and tasks across devices. Your data is encrypted in
+                transit and only accessible with your account.
+              </p>
+              <button
+                onClick={() => void signInWithGoogle()}
+                className="w-full flex items-center gap-3 justify-center py-3 bg-white hover:bg-slate-100 rounded-lg text-sm text-slate-900 font-medium transition-colors"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    fill="#4285F4"
+                  />
+                  <path
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    fill="#34A853"
+                  />
+                  <path
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+                    fill="#FBBC05"
+                  />
+                  <path
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    fill="#EA4335"
+                  />
+                </svg>
+                Continue with Google
+              </button>
+              <p className="text-center text-[10px] text-slate-600">
+                Only your habit data is synced. See Privacy Notice below.
+              </p>
+            </div>
+          )}
+        </SettingsSection>
+
         {/* ── Notifications ── */}
         <SettingsSection
           id="notifications"
@@ -296,15 +453,18 @@ export function SettingsPage(): JSX.Element {
             <div>
               <p className="text-slate-300 font-medium mb-1">Where is it stored?</p>
               <p>
-                All data is stored <strong className="text-slate-200">exclusively on your device</strong> using
-                IndexedDB (via Dexie). No data leaves your device. No server, no cloud, no
-                analytics.
+                All data is stored on your device first (IndexedDB via Dexie). If you sign in,
+                your data is also encrypted in transit and stored in your private Supabase account
+                — only you can access it via Row Level Security. No other user can see your data.
               </p>
             </div>
 
             <div>
-              <p className="text-slate-300 font-medium mb-1">Third-party services?</p>
-              <p>None. No tracking, no analytics, no third-party calls of any kind.</p>
+              <p className="text-slate-300 font-medium mb-1">Third-party services</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li><strong className="text-slate-300">Supabase</strong> — optional cloud sync & Google auth (only when signed in)</li>
+                <li>No analytics, no tracking, no ads</li>
+              </ul>
             </div>
 
             <div>
@@ -313,20 +473,12 @@ export function SettingsPage(): JSX.Element {
                 <li>Export your data at any time as JSON</li>
                 <li>Import data from a previous export</li>
                 <li>Delete all your data permanently</li>
+                <li>Sign out to stop all cloud sync</li>
               </ul>
             </div>
 
-            <div>
-              <p className="text-slate-300 font-medium mb-1">Future cloud sync</p>
-              <p>
-                If optional cloud sync is added in a future version, it will be strictly opt-in,
-                require explicit consent, and use data minimization principles. You will always be
-                able to stay local-only.
-              </p>
-            </div>
-
             <p className="text-slate-600 text-[10px]">
-              MicroHabits v2.0 · Local-first PWA · No external connections
+              MicroHabits v2.0 · Local-first PWA · Cloud sync via Supabase (opt-in)
             </p>
           </div>
         </SettingsSection>

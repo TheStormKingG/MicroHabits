@@ -11,6 +11,8 @@ import type { DayRecord, TaskItem, EveningReview } from '../types';
 import { getDayRecord, upsertDayRecord } from '../db/database';
 import { todayISO } from '../utils/completion';
 import { format, addDays, subDays } from 'date-fns';
+import { pushDayRecord } from '../lib/syncService';
+import { useAuth } from './AuthContext';
 
 interface TasksContextValue {
   todayDate: string;
@@ -46,6 +48,7 @@ function makeTaskItem(text: string): TaskItem {
 }
 
 export function TasksProvider({ children }: { children: React.ReactNode }): JSX.Element {
+  const { user } = useAuth();
   const todayDate = todayISO();
   const tomorrowDate = format(addDays(new Date(), 1), 'yyyy-MM-dd');
 
@@ -95,8 +98,9 @@ export function TasksProvider({ children }: { children: React.ReactNode }): JSX.
       const updated = updater(base);
       setTodayRecord(updated);
       await upsertDayRecord(updated);
+      if (user) void pushDayRecord(user.id, updated);
     },
-    [todayDate, todayRecord]
+    [todayDate, todayRecord, user]
   );
 
   const mutateTomorrow = useCallback(
@@ -105,8 +109,9 @@ export function TasksProvider({ children }: { children: React.ReactNode }): JSX.
       const updated = updater(base);
       setTomorrowRecord(updated);
       await upsertDayRecord(updated);
+      if (user) void pushDayRecord(user.id, updated);
     },
-    [tomorrowDate, tomorrowRecord]
+    [tomorrowDate, tomorrowRecord, user]
   );
 
   const addTodayTask = useCallback(

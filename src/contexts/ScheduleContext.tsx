@@ -13,6 +13,8 @@ import defaultScheduleRaw from '../data/default_schedule.json';
 import { getDayRecord, upsertDayRecord, getSettings, saveSettings } from '../db/database';
 import { todayISO } from '../utils/completion';
 import { scheduleNotificationsForToday } from '../utils/notifications';
+import { pushDayRecord, pushSettings } from '../lib/syncService';
+import { useAuth } from './AuthContext';
 
 const defaultSchedule = defaultScheduleRaw as SlotDefinition[];
 
@@ -31,6 +33,7 @@ interface ScheduleContextValue {
 const ScheduleContext = createContext<ScheduleContextValue | null>(null);
 
 export function ScheduleProvider({ children }: { children: React.ReactNode }): JSX.Element {
+  const { user } = useAuth();
   const [dayRecord, setDayRecord] = useState<DayRecord | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -106,8 +109,9 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }): J
       };
       setDayRecord(newRecord);
       await upsertDayRecord(newRecord);
+      if (user) void pushDayRecord(user.id, newRecord);
     },
-    [dayRecord]
+    [dayRecord, user]
   );
 
   const updateSlotNotes = useCallback(
@@ -120,8 +124,9 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }): J
       };
       setDayRecord(newRecord);
       await upsertDayRecord(newRecord);
+      if (user) void pushDayRecord(user.id, newRecord);
     },
-    [dayRecord]
+    [dayRecord, user]
   );
 
   const updateSlotSay = useCallback(
@@ -138,14 +143,16 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }): J
       const newSettings: AppSettings = { ...settings, customSlots };
       setSettings(newSettings);
       await saveSettings(newSettings);
+      if (user) void pushSettings(user.id, newSettings);
     },
-    [settings]
+    [settings, user]
   );
 
   const updateSettings = useCallback(async (newSettings: AppSettings) => {
     setSettings(newSettings);
     await saveSettings(newSettings);
-  }, []);
+    if (user) void pushSettings(user.id, newSettings);
+  }, [user]);
 
   const value = useMemo<ScheduleContextValue>(
     () => ({
