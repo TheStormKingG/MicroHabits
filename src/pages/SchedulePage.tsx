@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { JSX } from 'react';
 import { format } from 'date-fns';
 import { useSchedule } from '../contexts/ScheduleContext';
@@ -7,6 +7,7 @@ import { PageShell } from '../components/PageShell';
 import { SlotCard } from '../components/SlotCard';
 import { Spinner } from '../components/Spinner';
 import { TaskList, EveningReviewPanel } from '../components/TaskList';
+import { updatePushSchedule } from '../lib/pushService';
 import type { SlotDefinition } from '../types';
 
 /**
@@ -21,10 +22,12 @@ export function SchedulePage(): JSX.Element {
   const {
     slots,
     dayRecord,
+    settings,
     isLoading,
     toggleSlot,
     updateSlotNotes,
     updateSlotSay,
+    updateSlotDefinition,
   } = useSchedule();
 
   const {
@@ -50,6 +53,20 @@ export function SchedulePage(): JSX.Element {
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
   const today = format(new Date(), 'EEEE, MMMM d');
 
+  // Deep-link: if the URL has a #slotId hash (from a push notification tap),
+  // scroll to and auto-expand that card.
+  const deepLinkedSlotId = window.location.hash.replace('#', '') || null;
+  const hasScrolled = useRef(false);
+
+  useEffect(() => {
+    if (!deepLinkedSlotId || hasScrolled.current || isLoading) return;
+    const el = document.getElementById(`slot-${deepLinkedSlotId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      hasScrolled.current = true;
+    }
+  }, [deepLinkedSlotId, isLoading]);
+
   const handleToggle = useCallback(
     (slotId: string) => () => void toggleSlot(slotId),
     [toggleSlot]
@@ -63,6 +80,18 @@ export function SchedulePage(): JSX.Element {
   const handleSay = useCallback(
     (slotId: string) => (say: [string, string, string]) => void updateSlotSay(slotId, say),
     [updateSlotSay]
+  );
+
+  const handleDefinition = useCallback(
+    (slotId: string) => (patch: Partial<Pick<SlotDefinition, 'label' | 'time' | 'doText'>>) => {
+      void updateSlotDefinition(slotId, patch).then(() => {
+        // Keep server-side push schedule in sync with new slot names/times
+        if (settings?.notifications) {
+          void updatePushSchedule(slots, settings.notifications);
+        }
+      });
+    },
+    [updateSlotDefinition, slots, settings]
   );
 
   /**
@@ -181,16 +210,19 @@ export function SchedulePage(): JSX.Element {
           <ul className="space-y-2.5" role="list" aria-label="Schedule slots">
             {slots.map((slot: SlotDefinition) => {
               const taskPanel = TASK_PANEL_SLOTS.has(slot.id) ? getCustomPanel(slot.id) : undefined;
+              const isDeepLinked = slot.id === deepLinkedSlotId;
               return (
-                <li key={slot.id}>
+                <li key={slot.id} id={`slot-${slot.id}`}>
                   <SlotCard
                     slot={slot}
                     completion={dayRecord?.slots[slot.id]}
                     onToggle={handleToggle(slot.id)}
                     onNotesChange={taskPanel ? undefined : handleNotes(slot.id)}
                     onSayChange={handleSay(slot.id)}
+                    onDefinitionChange={handleDefinition(slot.id)}
                     customPanel={taskPanel?.panel}
                     customPanelLabel={taskPanel?.label}
+                    defaultExpanded={isDeepLinked}
                   />
                 </li>
               );

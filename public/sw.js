@@ -9,33 +9,55 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Handle push events (for future server-sent push support)
+// Handle push events from the server-side send-push Edge Function
 self.addEventListener('push', (event) => {
   if (!event.data) return;
   try {
     const data = event.data.json();
+    // Build the deep-link URL: /MicroHabits/schedule#<slotId>
+    const slotId = (data.tag ?? '').replace(/^habit-/, '');
+    const url = slotId
+      ? `/MicroHabits/schedule#${slotId}`
+      : (data.url ?? '/MicroHabits/schedule');
+
     event.waitUntil(
       self.registration.showNotification(data.title ?? 'MicroHabits', {
         body: data.body ?? '',
         icon: '/pwa-192x192.png',
         badge: '/pwa-192x192.png',
-        data: data.data ?? {},
+        tag: data.tag ?? 'habit',
+        // Pass the URL inside notification data so notificationclick can use it
+        data: { url },
       })
     );
   } catch {
-    // non-JSON push payload
+    // non-JSON push payload — show a generic notification
+    event.waitUntil(
+      self.registration.showNotification('MicroHabits', {
+        body: event.data.text(),
+        icon: '/pwa-192x192.png',
+        data: { url: '/MicroHabits/schedule' },
+      })
+    );
   }
 });
 
-// Handle notification click
+// Handle notification click — navigate to the specific schedule slot
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const targetUrl = event.notification.data?.url ?? '/MicroHabits/schedule';
+
   event.waitUntil(
-    self.clients.matchAll({ type: 'window' }).then((clients) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // If app is already open, navigate it to the target URL
       for (const client of clients) {
+        if ('navigate' in client) {
+          return client.navigate(targetUrl).then((c) => c?.focus());
+        }
         if ('focus' in client) return client.focus();
       }
-      if (self.clients.openWindow) return self.clients.openWindow('/');
+      // Otherwise open a new window
+      return self.clients.openWindow(targetUrl);
     })
   );
 });

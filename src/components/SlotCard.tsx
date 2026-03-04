@@ -1,19 +1,19 @@
 import { useState } from 'react';
 import type { JSX, ReactNode } from 'react';
-import { ChevronDown, ChevronUp, Check, MessageSquare, Pencil, Save } from 'lucide-react';
+import { ChevronDown, ChevronUp, Check, MessageSquare, Pencil, Save, X } from 'lucide-react';
 import type { SlotDefinition, SlotCompletion } from '../types';
 
 interface Props {
   slot: SlotDefinition;
   completion?: SlotCompletion;
   onToggle: () => void;
-  /** Called when notes change. Not used when customPanel is provided. */
   onNotesChange?: (notes: string) => void;
   onSayChange: (say: [string, string, string]) => void;
-  /** When provided, replaces the notes textarea with a custom section (e.g. an inline task list). */
+  onDefinitionChange?: (patch: Partial<Pick<SlotDefinition, 'label' | 'time' | 'doText'>>) => void;
   customPanel?: ReactNode;
-  /** Optional label shown above the custom panel */
   customPanelLabel?: string;
+  /** When true the card starts expanded (e.g. tapped from a push notification) */
+  defaultExpanded?: boolean;
 }
 
 const SAY_LABELS = ['Physical', 'Mind', 'Goal'] as const;
@@ -24,23 +24,37 @@ export function SlotCard({
   onToggle,
   onNotesChange,
   onSayChange,
+  onDefinitionChange,
   customPanel,
   customPanelLabel,
+  defaultExpanded = false,
 }: Props): JSX.Element {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [editingSay, setEditingSay] = useState(false);
   const [sayDraft, setSayDraft] = useState<[string, string, string]>(slot.say);
 
+  // Definition editing (label, time, doText)
+  const [editingDef, setEditingDef] = useState(false);
+  const [defDraft, setDefDraft] = useState({ label: slot.label, time: slot.time, doText: slot.doText });
+
   const isCompleted = completion?.completed ?? false;
 
-  const handleSaySave = () => {
-    onSayChange(sayDraft);
-    setEditingSay(false);
-  };
+  // ── Say handlers ────────────────────────────────────────────────────────────
+  const handleSaySave = () => { onSayChange(sayDraft); setEditingSay(false); };
+  const handleSayCancel = () => { setSayDraft(slot.say); setEditingSay(false); };
 
-  const handleSayCancel = () => {
-    setSayDraft(slot.say);
-    setEditingSay(false);
+  // ── Definition handlers ──────────────────────────────────────────────────────
+  const handleDefEdit = () => {
+    setDefDraft({ label: slot.label, time: slot.time, doText: slot.doText });
+    setEditingDef(true);
+  };
+  const handleDefSave = () => {
+    onDefinitionChange?.(defDraft);
+    setEditingDef(false);
+  };
+  const handleDefCancel = () => {
+    setDefDraft({ label: slot.label, time: slot.time, doText: slot.doText });
+    setEditingDef(false);
   };
 
   return (
@@ -68,40 +82,104 @@ export function SlotCard({
           <Check size={14} strokeWidth={3} aria-hidden="true" />
         </button>
 
-        {/* Time + Label + Do */}
+        {/* Time + Label + Do — editable inline */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-2">
-            <span className="text-xs font-mono text-slate-400 tabular-nums flex-shrink-0">
-              {slot.time}
-            </span>
-            <span
-              className={`font-semibold text-sm leading-tight truncate ${
-                isCompleted ? 'text-green-300 line-through decoration-green-600' : 'text-slate-100'
-              }`}
-            >
-              {slot.label}
-            </span>
-          </div>
-          <p className="text-xs text-slate-300 mt-0.5 leading-snug">{slot.doText}</p>
+          {editingDef ? (
+            <div className="space-y-1.5">
+              <div className="flex gap-2">
+                {/* Time */}
+                <input
+                  type="time"
+                  value={defDraft.time}
+                  onChange={(e) => setDefDraft((d) => ({ ...d, time: e.target.value }))}
+                  className="w-24 text-xs font-mono bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  aria-label="Slot time"
+                />
+                {/* Label */}
+                <input
+                  type="text"
+                  value={defDraft.label}
+                  onChange={(e) => setDefDraft((d) => ({ ...d, label: e.target.value }))}
+                  placeholder="Name"
+                  className="flex-1 text-xs bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  aria-label="Slot name"
+                />
+              </div>
+              {/* Do text */}
+              <textarea
+                value={defDraft.doText}
+                onChange={(e) => setDefDraft((d) => ({ ...d, doText: e.target.value }))}
+                placeholder="Do instructions…"
+                rows={2}
+                className="w-full text-xs bg-slate-700 border border-slate-600 rounded-md px-2 py-1.5 text-slate-200 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                aria-label="Do instructions"
+              />
+              {/* Save / Cancel */}
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={handleDefCancel}
+                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                >
+                  <X size={11} aria-hidden="true" /> Cancel
+                </button>
+                <button
+                  onClick={handleDefSave}
+                  className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 transition-colors"
+                >
+                  <Save size={11} aria-hidden="true" /> Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="group flex items-start gap-1">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs font-mono text-slate-400 tabular-nums flex-shrink-0">
+                    {slot.time}
+                  </span>
+                  <span
+                    className={`font-semibold text-sm leading-tight truncate ${
+                      isCompleted ? 'text-green-300 line-through decoration-green-600' : 'text-slate-100'
+                    }`}
+                  >
+                    {slot.label}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5 leading-snug">{slot.doText}</p>
+              </div>
+              {/* Edit definition button — visible on hover/tap */}
+              {onDefinitionChange && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDefEdit(); }}
+                  aria-label="Edit slot name, time and instructions"
+                  className="flex-shrink-0 p-1 text-slate-600 hover:text-indigo-400 transition-colors mt-0.5"
+                >
+                  <Pencil size={12} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Expand toggle */}
-        <button
-          onClick={() => setExpanded((e) => !e)}
-          aria-expanded={expanded}
-          aria-label={expanded ? 'Collapse details' : 'Expand details'}
-          className="flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-200 transition-colors"
-        >
-          {expanded ? (
-            <ChevronUp size={16} aria-hidden="true" />
-          ) : (
-            <ChevronDown size={16} aria-hidden="true" />
-          )}
-        </button>
+        {/* Expand toggle — hidden while editing def to reduce clutter */}
+        {!editingDef && (
+          <button
+            onClick={() => setExpanded((e) => !e)}
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Collapse details' : 'Expand details'}
+            className="flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            {expanded ? (
+              <ChevronUp size={16} aria-hidden="true" />
+            ) : (
+              <ChevronDown size={16} aria-hidden="true" />
+            )}
+          </button>
+        )}
       </div>
 
       {/* ── Expanded body ── */}
-      {expanded && (
+      {expanded && !editingDef && (
         <div className="px-3 pb-3 space-y-3 border-t border-slate-700/50 pt-3">
           {/* SAY section */}
           <section aria-label="Say statements">

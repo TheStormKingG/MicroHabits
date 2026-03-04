@@ -26,6 +26,8 @@ interface ScheduleContextValue {
   toggleSlot: (slotId: string) => Promise<void>;
   updateSlotNotes: (slotId: string, notes: string) => Promise<void>;
   updateSlotSay: (slotId: string, say: [string, string, string]) => Promise<void>;
+  /** Update label, time, and/or doText of a slot. */
+  updateSlotDefinition: (slotId: string, patch: Partial<Pick<SlotDefinition, 'label' | 'time' | 'doText'>>) => Promise<void>;
   updateSettings: (settings: AppSettings) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -148,6 +150,25 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }): J
     [settings, user]
   );
 
+  const updateSlotDefinition = useCallback(
+    async (slotId: string, patch: Partial<Pick<SlotDefinition, 'label' | 'time' | 'doText'>>) => {
+      if (!settings) return;
+      const existing = settings.customSlots.find((s) => s.id === slotId);
+      const baseSlot = defaultSchedule.find((s) => s.id === slotId);
+      if (!baseSlot) return;
+      const updated: SlotDefinition = { ...(existing ?? baseSlot), ...patch };
+      const customSlots = [
+        ...settings.customSlots.filter((s) => s.id !== slotId),
+        updated,
+      ];
+      const newSettings: AppSettings = { ...settings, customSlots };
+      setSettings(newSettings);
+      await saveSettings(newSettings);
+      if (user) void pushSettings(user.id, newSettings);
+    },
+    [settings, user]
+  );
+
   const updateSettings = useCallback(async (newSettings: AppSettings) => {
     setSettings(newSettings);
     await saveSettings(newSettings);
@@ -163,10 +184,11 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }): J
       toggleSlot,
       updateSlotNotes,
       updateSlotSay,
+      updateSlotDefinition,
       updateSettings,
       refresh: load,
     }),
-    [slots, dayRecord, settings, isLoading, toggleSlot, updateSlotNotes, updateSlotSay, updateSettings, load]
+    [slots, dayRecord, settings, isLoading, toggleSlot, updateSlotNotes, updateSlotSay, updateSlotDefinition, updateSettings, load]
   );
 
   return <ScheduleContext.Provider value={value}>{children}</ScheduleContext.Provider>;
