@@ -10,7 +10,7 @@ const defaultSettings: AppSettings = {
 
 const sampleRecord: DayRecord = {
   date: '2025-03-01',
-  slots: { wake: { completed: true, notes: 'felt great' } },
+  slots: { wake: { completed: true, sayDone: false, notes: 'felt great' } },
   todayTasks: [{ id: 't1', text: 'Do laundry', done: false, createdAt: '2025-03-01T08:00:00Z' }],
   tomorrowTasks: [],
 };

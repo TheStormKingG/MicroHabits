@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { JSX } from 'react';
 import { format } from 'date-fns';
 import { X, Check } from 'lucide-react';
@@ -8,6 +8,7 @@ import { SlotCard } from '../components/SlotCard';
 import { Spinner } from '../components/Spinner';
 import { TaskList, EveningReviewPanel } from '../components/TaskList';
 import { updatePushSchedule } from '../lib/pushService';
+import { getSlotStars, starCount } from '../utils/stars';
 import type { SlotDefinition } from '../types';
 import wheelConfigRaw from '../data/wheel_config.json';
 import type { WheelConfig } from '../types';
@@ -15,11 +16,11 @@ import type { WheelConfig } from '../types';
 const wheelConfig = wheelConfigRaw as WheelConfig;
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
-const SLOT_SPACING  = 130;
+const SLOT_SPACING  = 140;   // px between node centres
 const PAD_TOP       = 24;
 const PAD_BOTTOM    = 80;
-const NODE_R        = 30;   // base node radius (px)
-const ACTIVE_NODE_R = 38;   // active / next-due node radius
+const NODE_R        = 30;
+const ACTIVE_NODE_R = 38;
 
 const TASK_PANEL_SLOTS = new Set(['coffee', 'water', 'meditate']);
 
@@ -37,43 +38,37 @@ const ZIGZAG_CYCLE = [50, 68, 80, 68, 50, 32, 20, 32];
 function getXPct(i: number): number { return ZIGZAG_CYCLE[i % ZIGZAG_CYCLE.length]; }
 function getNodeCY(i: number): number { return PAD_TOP + i * SLOT_SPACING + NODE_R; }
 
-// ─── Colour helpers for 3-D shading ──────────────────────────────────────────
-function hexToRgb(hex: string): [number, number, number] {
-  const n = parseInt(hex.replace('#', ''), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
+// ─── Colour helpers ───────────────────────────────────────────────────────────
 function shiftHex(hex: string, amt: number): string {
-  const [r, g, b] = hexToRgb(hex);
+  const n = parseInt(hex.replace('#', ''), 16);
   const clamp = (v: number) => Math.max(0, Math.min(255, v));
-  return `rgb(${clamp(r + amt)},${clamp(g + amt)},${clamp(b + amt)})`;
+  const r = clamp(((n >> 16) & 255) + amt);
+  const g = clamp(((n >>  8) & 255) + amt);
+  const b = clamp((n & 255)         + amt);
+  return `rgb(${r},${g},${b})`;
 }
 
-interface NodeVisuals {
-  bg:     string;   // radial-gradient background
-  shadow: string;   // box-shadow (depth + optional ring)
-}
+interface NodeVisuals { bg: string; shadow: string; }
 
 function getNodeVisuals(
   baseColor: string,
   isDone: boolean,
   isFuture: boolean,
   isNext: boolean,
+  allStarsDone: boolean,
 ): NodeVisuals {
-  // Pick palette
-  const color  = isFuture ? '#374151' : isDone ? '#22c55e' : baseColor;
-  const light  = isFuture ? '#6b7280' : isDone ? '#86efac' : shiftHex(color, +55);
-  const dark   = isFuture ? '#1f2937' : isDone ? '#16a34a' : shiftHex(color, -35);
-  const depth  = isFuture ? '#0a0e17' : isDone ? '#14532d' : shiftHex(color, -65);
+  const color = isFuture ? '#374151'
+    : allStarsDone ? '#f59e0b'
+    : isDone       ? '#22c55e'
+    : baseColor;
 
-  const bg = `radial-gradient(circle at 36% 28%, ${light}, ${color} 55%, ${dark})`;
+  const light  = isFuture ? '#6b7280' : allStarsDone ? '#fcd34d' : isDone ? '#86efac' : shiftHex(color, +55);
+  const dark   = isFuture ? '#1f2937' : allStarsDone ? '#d97706' : isDone ? '#16a34a' : shiftHex(color, -35);
+  const depth  = isFuture ? '#0a0e17' : allStarsDone ? '#92400e' : isDone ? '#14532d' : shiftHex(color, -65);
 
-  // Depth "pressed bottom" shadow
+  const bg     = `radial-gradient(circle at 36% 28%, ${light}, ${color} 55%, ${dark})`;
   const base3d = `0 6px 0 ${depth}, 0 8px 22px rgba(0,0,0,0.55)`;
-
-  // Active node gets a double ring: dark gap then coloured halo
-  const ring = isNext
-    ? `, 0 0 0 5px #060b12, 0 0 0 11px ${color}cc`
-    : '';
+  const ring   = isNext ? `, 0 0 0 5px #060b12, 0 0 0 11px ${color}cc` : '';
 
   return { bg, shadow: base3d + ring };
 }
@@ -84,11 +79,24 @@ function buildSegment(x1: number, y1: number, x2: number, y2: number): string {
   return `M ${x1} ${y1} C ${x1} ${y1 + h}, ${x2} ${y2 - h}, ${x2} ${y2}`;
 }
 
+// ─── Star SVG (inline, tiny) ──────────────────────────────────────────────────
+function StarIcon({ earned }: { earned: boolean }): JSX.Element {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"
+      fill={earned ? '#fbbf24' : '#1e293b'}
+      stroke={earned ? '#f59e0b' : '#334155'}
+      strokeWidth="1.5"
+    >
+      <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
+    </svg>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function SchedulePage(): JSX.Element {
   const {
     slots, dayRecord, settings, isLoading,
-    toggleSlot, updateSlotNotes, updateSlotSay, updateSlotDefinition,
+    toggleSlot, toggleSlotSay, updateSlotNotes, updateSlotSay, updateSlotDefinition,
   } = useSchedule();
 
   const {
@@ -124,6 +132,21 @@ export function SchedulePage(): JSX.Element {
       .filter(([, v]) => v.completed)
       .map(([k]) => k)
   );
+
+  // Pre-compute stars for every slot
+  const allStars = useMemo(() => {
+    const map = new Map<string, [boolean, boolean, boolean]>();
+    for (const slot of slots) {
+      const completion = dayRecord?.slots[slot.id];
+      let ctx = {};
+      if (slot.id === 'coffee')   ctx = { tasks: todayRecord?.todayTasks };
+      if (slot.id === 'water')    ctx = { eveningReview: todayRecord?.eveningReview };
+      if (slot.id === 'meditate') ctx = { tasks: tomorrowRecord?.tomorrowTasks };
+      map.set(slot.id, getSlotStars(slot, completion, ctx));
+    }
+    return map;
+  }, [slots, dayRecord, todayRecord, tomorrowRecord]);
+
   const completed  = completedIds.size;
   const total      = slots.length;
   const pct        = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -134,6 +157,9 @@ export function SchedulePage(): JSX.Element {
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleToggle = useCallback(
     (id: string) => () => void toggleSlot(id), [toggleSlot]
+  );
+  const handleSayDone = useCallback(
+    (id: string) => () => void toggleSlotSay(id), [toggleSlotSay]
   );
   const handleNotes = useCallback(
     (id: string) => (notes: string) => void updateSlotNotes(id, notes), [updateSlotNotes]
@@ -204,6 +230,7 @@ export function SchedulePage(): JSX.Element {
   );
 
   const activeSlot = slots.find((s) => s.id === activeSlotId);
+  const activeStars = activeSlot ? (allStars.get(activeSlot.id) ?? [false, false, false]) : undefined;
 
   return (
     <>
@@ -216,9 +243,7 @@ export function SchedulePage(): JSX.Element {
         >
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">
-                Daily Schedule
-              </p>
+              <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Daily Schedule</p>
               <h1 className="text-base font-bold text-slate-100 leading-tight">{today}</h1>
             </div>
             <div className="flex flex-col items-end">
@@ -241,20 +266,14 @@ export function SchedulePage(): JSX.Element {
           ) : (
             <div ref={containerRef} className="relative mx-auto" style={{ height: svgH, maxWidth: 480 }}>
 
-              {/* SVG path */}
-              <svg
-                viewBox={`0 0 ${cw} ${svgH}`}
-                width={cw}
-                height={svgH}
-                className="absolute inset-0 pointer-events-none"
-              >
+              {/* SVG connecting path */}
+              <svg viewBox={`0 0 ${cw} ${svgH}`} width={cw} height={svgH} className="absolute inset-0 pointer-events-none">
                 {slots.slice(0, -1).map((slot, i) => {
                   const x1 = cw * getXPct(i)     / 100;
                   const y1 = getNodeCY(i);
                   const x2 = cw * getXPct(i + 1) / 100;
                   const y2 = getNodeCY(i + 1);
-                  const bothDone = completedIds.has(slot.id) && completedIds.has(slots[i + 1].id);
-                  // Segments beyond next-due are faint
+                  const bothDone   = completedIds.has(slot.id) && completedIds.has(slots[i + 1].id);
                   const isFutureSeg = i >= nextDueIdx && nextDueIdx !== -1 && !bothDone;
                   return (
                     <path
@@ -262,8 +281,7 @@ export function SchedulePage(): JSX.Element {
                       d={buildSegment(x1, y1, x2, y2)}
                       stroke={bothDone ? '#22c55e' : isFutureSeg ? 'rgba(55,65,81,0.6)' : 'rgba(71,85,105,0.55)'}
                       strokeWidth={bothDone ? 7 : 5}
-                      fill="none"
-                      strokeLinecap="round"
+                      fill="none" strokeLinecap="round"
                     />
                   );
                 })}
@@ -271,106 +289,94 @@ export function SchedulePage(): JSX.Element {
 
               {/* Nodes */}
               {slots.map((slot, i) => {
-                const xPct    = getXPct(i);
-                const xPx     = cw * xPct / 100;
-                const isDone  = completedIds.has(slot.id);
-                const isNext  = i === nextDueIdx;
+                const xPct     = getXPct(i);
+                const xPx      = cw * xPct / 100;
+                const isDone   = completedIds.has(slot.id);
+                const isNext   = i === nextDueIdx;
                 const isFuture = !isDone && nextDueIdx !== -1 && i > nextDueIdx;
-                const r       = isNext ? ACTIVE_NODE_R : NODE_R;
-                const yCenter = getNodeCY(i);   // center y
-                const yTop    = yCenter - r;    // top-left corner for absolute
+                const r        = isNext ? ACTIVE_NODE_R : NODE_R;
+                const yCtr     = getNodeCY(i);
+                const yTop     = yCtr - r;
                 const baseColor = SLOT_COLORS[slot.id] ?? '#6366f1';
-                const { bg, shadow } = getNodeVisuals(baseColor, isDone, isFuture, isNext);
+                const stars    = allStars.get(slot.id) ?? [false, false, false];
+                const earned   = starCount(stars);
+                const allDone  = earned === 3;
+                const { bg, shadow } = getNodeVisuals(baseColor, isDone, isFuture, isNext, allDone);
                 const labelRight = xPct >= 50;
 
                 return (
                   <div key={slot.id}>
-                    {/* Pulsing ring — separate element behind the button */}
+                    {/* Pulse ring for active node */}
                     {isNext && (
                       <div
                         className="pulse-ring-anim absolute rounded-full pointer-events-none"
-                        style={{
-                          left:   xPx - r - 10,
-                          top:    yTop - 10,
-                          width:  (r + 10) * 2,
-                          height: (r + 10) * 2,
-                          border: `3px solid ${baseColor}`,
-                        }}
+                        style={{ left: xPx - r - 10, top: yTop - 10, width: (r + 10) * 2, height: (r + 10) * 2, border: `3px solid ${baseColor}` }}
                       />
                     )}
 
-                    {/* Circle button */}
+                    {/* Circle */}
                     <button
                       onClick={() => setActiveSlotId(activeSlotId === slot.id ? null : slot.id)}
                       aria-label={`${slot.label} at ${slot.time}`}
                       style={{
-                        position: 'absolute',
-                        left:   xPx - r,
-                        top:    yTop,
-                        width:  r * 2,
-                        height: r * 2,
-                        background: bg,
-                        boxShadow: shadow,
+                        position: 'absolute', left: xPx - r, top: yTop,
+                        width: r * 2, height: r * 2,
+                        background: bg, boxShadow: shadow,
                       }}
                       className={`rounded-full flex items-center justify-center transition-all duration-200 z-10 ${
                         activeSlotId === slot.id ? 'scale-110' : 'active:scale-95'
                       }`}
                     >
-                      {/* Inner gloss highlight */}
-                      <div
-                        className="absolute rounded-full pointer-events-none"
-                        style={{
-                          top: '8%', left: '18%', width: '42%', height: '30%',
-                          background: 'rgba(255,255,255,0.18)',
-                          filter: 'blur(2px)',
-                        }}
-                      />
+                      {/* Gloss */}
+                      <div className="absolute rounded-full pointer-events-none" style={{ top: '8%', left: '18%', width: '42%', height: '30%', background: 'rgba(255,255,255,0.18)', filter: 'blur(2px)' }} />
                       {isDone ? (
-                        <Check
-                          size={r > 32 ? 22 : 18}
-                          className="text-white relative z-10"
-                          strokeWidth={3}
-                        />
+                        <Check size={r > 32 ? 22 : 18} className="text-white relative z-10" strokeWidth={3} />
                       ) : (
-                        <span
-                          className="relative z-10 select-none"
-                          style={{
-                            fontSize: r > 32 ? 22 : 17,
-                            opacity: isFuture ? 0.45 : 1,
-                            filter: isFuture ? 'grayscale(1)' : 'none',
-                          }}
-                        >
+                        <span className="relative z-10 select-none" style={{ fontSize: r > 32 ? 22 : 17, opacity: isFuture ? 0.45 : 1, filter: isFuture ? 'grayscale(1)' : 'none' }}>
                           {SLOT_ICONS[slot.id] ?? '⭐'}
                         </span>
                       )}
                     </button>
 
+                    {/* Stars below node — always shown (greyed if not earned) */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: yCtr + r + 6,
+                        left: xPx - 24,
+                        width: 48,
+                        display: 'flex',
+                        justifyContent: 'center',
+                        gap: 2,
+                      }}
+                    >
+                      {stars.map((e, si) => <StarIcon key={si} earned={e} />)}
+                    </div>
+
                     {/* Label */}
                     <div
                       style={{
                         position: 'absolute',
-                        top:  yCenter - 22,
+                        top: yCtr - 22,
                         ...(labelRight
                           ? { right: cw - xPx + r + 12, textAlign: 'right' }
                           : { left:  xPx + r + 12,      textAlign: 'left'  }),
                         maxWidth: '38%',
                       }}
                     >
-                      <p className="text-[10px] font-mono text-slate-500 leading-none mb-0.5">
-                        {slot.time}
-                      </p>
+                      <p className="text-[10px] font-mono text-slate-500 leading-none mb-0.5">{slot.time}</p>
                       <p className={`text-sm font-bold leading-tight ${
-                        isFuture   ? 'text-slate-600' :
-                        isDone     ? 'text-emerald-400' :
-                        isNext     ? 'text-white' : 'text-slate-300'
-                      }`}>
-                        {slot.label}
-                      </p>
-                      <p className={`text-[10px] leading-tight line-clamp-2 mt-0.5 ${
-                        isFuture ? 'text-slate-700' : 'text-slate-500'
-                      }`}>
+                        isFuture ? 'text-slate-600' : isDone ? 'text-emerald-400' : isNext ? 'text-white' : 'text-slate-300'
+                      }`}>{slot.label}</p>
+                      <p className={`text-[10px] leading-tight line-clamp-2 mt-0.5 ${isFuture ? 'text-slate-700' : 'text-slate-500'}`}>
                         {slot.doText}
                       </p>
+                      {/* Earned star count hint */}
+                      {earned > 0 && (
+                        <p className={`text-[10px] font-semibold mt-0.5 ${allDone ? 'text-amber-400' : 'text-slate-500'}`}>
+                          {allDone ? '★ Perfect' : `${earned}/3 ★`}
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
@@ -385,7 +391,9 @@ export function SchedulePage(): JSX.Element {
         <SlotDetailSheet
           slot={activeSlot}
           completion={dayRecord?.slots[activeSlot.id]}
+          stars={activeStars as [boolean, boolean, boolean]}
           onToggle={handleToggle(activeSlot.id)}
+          onSayDone={handleSayDone(activeSlot.id)}
           onNotesChange={TASK_PANEL_SLOTS.has(activeSlot.id) ? undefined : handleNotes(activeSlot.id)}
           onSayChange={handleSay(activeSlot.id)}
           onDefinitionChange={handleDefinition(activeSlot.id)}
@@ -401,8 +409,10 @@ export function SchedulePage(): JSX.Element {
 // ─── Bottom sheet ─────────────────────────────────────────────────────────────
 interface SheetProps {
   slot: SlotDefinition;
-  completion?: { completed: boolean; notes: string; completedAt?: string };
+  completion?: { completed: boolean; sayDone: boolean; notes: string; completedAt?: string };
+  stars?: [boolean, boolean, boolean];
   onToggle: () => void;
+  onSayDone?: () => void;
   onNotesChange?: (notes: string) => void;
   onSayChange: (say: [string, string, string]) => void;
   onDefinitionChange?: (patch: Partial<Pick<SlotDefinition, 'label' | 'time' | 'doText'>>) => void;
@@ -412,30 +422,23 @@ interface SheetProps {
 }
 
 function SlotDetailSheet({
-  slot, completion, onToggle, onNotesChange, onSayChange,
+  slot, completion, stars, onToggle, onSayDone, onNotesChange, onSayChange,
   onDefinitionChange, customPanel, customPanelLabel, onClose,
 }: SheetProps): JSX.Element {
   const color = wheelConfig.habits.find((h) => h.id === slot.id)?.color ?? '#6366f1';
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div className="relative bg-slate-900 rounded-t-2xl shadow-2xl max-h-[80vh] flex flex-col animate-slide-up">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
+      <div className="relative bg-slate-900 rounded-t-2xl shadow-2xl max-h-[82vh] flex flex-col animate-slide-up">
+        {/* Sheet header */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-700/60 flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
             <span className="text-xs font-mono text-slate-400">{slot.time}</span>
             <span className="text-base font-bold text-slate-100">{slot.label}</span>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 transition-colors"
-          >
+          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-full text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 transition-colors">
             <X size={18} />
           </button>
         </div>
@@ -443,7 +446,9 @@ function SlotDetailSheet({
           <SlotCard
             slot={slot}
             completion={completion}
+            stars={stars}
             onToggle={onToggle}
+            onSayDone={onSayDone}
             onNotesChange={onNotesChange}
             onSayChange={onSayChange}
             onDefinitionChange={onDefinitionChange}

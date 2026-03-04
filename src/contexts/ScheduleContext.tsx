@@ -24,6 +24,7 @@ interface ScheduleContextValue {
   settings: AppSettings | null;
   isLoading: boolean;
   toggleSlot: (slotId: string) => Promise<void>;
+  toggleSlotSay: (slotId: string) => Promise<void>;
   updateSlotNotes: (slotId: string, notes: string) => Promise<void>;
   updateSlotSay: (slotId: string, say: [string, string, string]) => Promise<void>;
   /** Update label, time, and/or doText of a slot. */
@@ -102,8 +103,30 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }): J
       const current = dayRecord.slots[slotId];
       const updated: SlotCompletion = {
         completed: !(current?.completed ?? false),
-        notes: current?.notes ?? '',
+        sayDone:   current?.sayDone ?? false,
+        notes:     current?.notes ?? '',
         completedAt: new Date().toISOString(),
+      };
+      const newRecord: DayRecord = {
+        ...dayRecord,
+        slots: { ...dayRecord.slots, [slotId]: updated },
+      };
+      setDayRecord(newRecord);
+      await upsertDayRecord(newRecord);
+      if (user) void pushDayRecord(user.id, newRecord);
+    },
+    [dayRecord, user]
+  );
+
+  const toggleSlotSay = useCallback(
+    async (slotId: string) => {
+      if (!dayRecord) return;
+      const current = dayRecord.slots[slotId];
+      const updated: SlotCompletion = {
+        completed: current?.completed ?? false,
+        sayDone:   !(current?.sayDone ?? false),
+        notes:     current?.notes ?? '',
+        completedAt: current?.completedAt,
       };
       const newRecord: DayRecord = {
         ...dayRecord,
@@ -119,7 +142,7 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }): J
   const updateSlotNotes = useCallback(
     async (slotId: string, notes: string) => {
       if (!dayRecord) return;
-      const current = dayRecord.slots[slotId] ?? { completed: false, notes: '' };
+      const current = dayRecord.slots[slotId] ?? { completed: false, sayDone: false, notes: '' };
       const newRecord: DayRecord = {
         ...dayRecord,
         slots: { ...dayRecord.slots, [slotId]: { ...current, notes } },
@@ -182,13 +205,14 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }): J
       settings,
       isLoading,
       toggleSlot,
+      toggleSlotSay,
       updateSlotNotes,
       updateSlotSay,
       updateSlotDefinition,
       updateSettings,
       refresh: load,
     }),
-    [slots, dayRecord, settings, isLoading, toggleSlot, updateSlotNotes, updateSlotSay, updateSlotDefinition, updateSettings, load]
+    [slots, dayRecord, settings, isLoading, toggleSlot, toggleSlotSay, updateSlotNotes, updateSlotSay, updateSlotDefinition, updateSettings, load]
   );
 
   return <ScheduleContext.Provider value={value}>{children}</ScheduleContext.Provider>;

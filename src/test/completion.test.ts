@@ -5,7 +5,7 @@ import type { DayRecord } from '../types';
 function makeRecord(date: string, completedIds: string[]): DayRecord {
   const slots: DayRecord['slots'] = {};
   for (const id of completedIds) {
-    slots[id] = { completed: true, notes: '' };
+    slots[id] = { completed: true, sayDone: false, notes: '' };
   }
   return { date, slots, todayTasks: [], tomorrowTasks: [] };
 }
@@ -42,9 +42,9 @@ describe('calcDayCompletionPct', () => {
     const record: DayRecord = {
       date: '2025-01-01',
       slots: {
-        a: { completed: true, notes: '' },
-        b: { completed: false, notes: '' },
-        c: { completed: true, notes: '' },
+        a: { completed: true, sayDone: false, notes: '' },
+        b: { completed: false, sayDone: false, notes: '' },
+        c: { completed: true, sayDone: false, notes: '' },
       },
       todayTasks: [],
       tomorrowTasks: [],

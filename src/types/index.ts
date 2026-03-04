@@ -9,7 +9,8 @@ export interface SlotDefinition {
 }
 
 export interface SlotCompletion {
-  completed: boolean;
+  completed: boolean;   // "Do" checkbox
+  sayDone: boolean;     // "Say" checkbox
   notes: string;
   completedAt?: string; // ISO timestamp
 }
