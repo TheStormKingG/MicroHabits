@@ -18,38 +18,70 @@ const wheelConfig = wheelConfigRaw as WheelConfig;
 const SLOT_SPACING  = 130;
 const PAD_TOP       = 24;
 const PAD_BOTTOM    = 80;
-const NODE_R        = 30;   // circle radius (px)
-const ACTIVE_NODE_R = 36;   // active slot radius
+const NODE_R        = 30;   // base node radius (px)
+const ACTIVE_NODE_R = 38;   // active / next-due node radius
 
-// Slots that embed task panels instead of notes
 const TASK_PANEL_SLOTS = new Set(['coffee', 'water', 'meditate']);
 
-// Per-slot teal/color map from wheel_config
 const SLOT_COLORS: Record<string, string> = Object.fromEntries(
   wheelConfig.habits.map((h) => [h.id, h.color])
 );
 
-// Emoji icons per slot
 const SLOT_ICONS: Record<string, string> = {
   wake: '🌅', brush: '🪥', coffee: '☕', car1: '🚗', park1: '🏃',
   keynaan: '💙', car2: '🚗', park2: '🏃', car3: '🚗', ebrf: '💪',
   yard: '🌿', read: '📖', water: '💧', meditate: '🧘', sleep: '🌙',
 };
 
-// Zigzag X positions as % of container width
 const ZIGZAG_CYCLE = [50, 68, 80, 68, 50, 32, 20, 32];
 function getXPct(i: number): number { return ZIGZAG_CYCLE[i % ZIGZAG_CYCLE.length]; }
-
-// Node center Y in px
 function getNodeCY(i: number): number { return PAD_TOP + i * SLOT_SPACING + NODE_R; }
 
-// ─── SVG path ─────────────────────────────────────────────────────────────────
-function buildSegment(
-  x1: number, y1: number,
-  x2: number, y2: number
-): string {
-  const halfY = SLOT_SPACING * 0.45;
-  return `M ${x1} ${y1} C ${x1} ${y1 + halfY}, ${x2} ${y2 - halfY}, ${x2} ${y2}`;
+// ─── Colour helpers for 3-D shading ──────────────────────────────────────────
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function shiftHex(hex: string, amt: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const clamp = (v: number) => Math.max(0, Math.min(255, v));
+  return `rgb(${clamp(r + amt)},${clamp(g + amt)},${clamp(b + amt)})`;
+}
+
+interface NodeVisuals {
+  bg:     string;   // radial-gradient background
+  shadow: string;   // box-shadow (depth + optional ring)
+}
+
+function getNodeVisuals(
+  baseColor: string,
+  isDone: boolean,
+  isFuture: boolean,
+  isNext: boolean,
+): NodeVisuals {
+  // Pick palette
+  const color  = isFuture ? '#374151' : isDone ? '#22c55e' : baseColor;
+  const light  = isFuture ? '#6b7280' : isDone ? '#86efac' : shiftHex(color, +55);
+  const dark   = isFuture ? '#1f2937' : isDone ? '#16a34a' : shiftHex(color, -35);
+  const depth  = isFuture ? '#0a0e17' : isDone ? '#14532d' : shiftHex(color, -65);
+
+  const bg = `radial-gradient(circle at 36% 28%, ${light}, ${color} 55%, ${dark})`;
+
+  // Depth "pressed bottom" shadow
+  const base3d = `0 6px 0 ${depth}, 0 8px 22px rgba(0,0,0,0.55)`;
+
+  // Active node gets a double ring: dark gap then coloured halo
+  const ring = isNext
+    ? `, 0 0 0 5px #060b12, 0 0 0 11px ${color}cc`
+    : '';
+
+  return { bg, shadow: base3d + ring };
+}
+
+// ─── SVG bezier segment ───────────────────────────────────────────────────────
+function buildSegment(x1: number, y1: number, x2: number, y2: number): string {
+  const h = SLOT_SPACING * 0.46;
+  return `M ${x1} ${y1} C ${x1} ${y1 + h}, ${x2} ${y2 - h}, ${x2} ${y2}`;
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -68,10 +100,9 @@ export function SchedulePage(): JSX.Element {
 
   const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
   const containerRef  = useRef<HTMLDivElement>(null);
-  const [cw, setCw]   = useState(340); // container width in px
+  const [cw, setCw]   = useState(340);
   const hasDeepLinked = useRef(false);
 
-  // Measure container width for accurate SVG coordinates
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -80,7 +111,6 @@ export function SchedulePage(): JSX.Element {
     return () => ro.disconnect();
   }, []);
 
-  // Deep-link from push notification (#slotId in URL)
   const deepLinkedSlotId = window.location.hash.replace('#', '') || null;
   useEffect(() => {
     if (deepLinkedSlotId && !hasDeepLinked.current && !isLoading) {
@@ -94,38 +124,33 @@ export function SchedulePage(): JSX.Element {
       .filter(([, v]) => v.completed)
       .map(([k]) => k)
   );
-  const completed   = completedIds.size;
-  const total       = slots.length;
-  const pct         = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const nextDueIdx  = slots.findIndex((s) => !completedIds.has(s.id));
-  const today       = format(new Date(), 'EEEE, MMMM d');
-  const svgH        = PAD_TOP + slots.length * SLOT_SPACING + PAD_BOTTOM;
+  const completed  = completedIds.size;
+  const total      = slots.length;
+  const pct        = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const nextDueIdx = slots.findIndex((s) => !completedIds.has(s.id));
+  const today      = format(new Date(), 'EEEE, MMMM d');
+  const svgH       = PAD_TOP + slots.length * SLOT_SPACING + PAD_BOTTOM;
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleToggle = useCallback(
-    (slotId: string) => () => void toggleSlot(slotId),
-    [toggleSlot]
+    (id: string) => () => void toggleSlot(id), [toggleSlot]
   );
   const handleNotes = useCallback(
-    (slotId: string) => (notes: string) => void updateSlotNotes(slotId, notes),
-    [updateSlotNotes]
+    (id: string) => (notes: string) => void updateSlotNotes(id, notes), [updateSlotNotes]
   );
   const handleSay = useCallback(
-    (slotId: string) => (say: [string, string, string]) => void updateSlotSay(slotId, say),
-    [updateSlotSay]
+    (id: string) => (say: [string, string, string]) => void updateSlotSay(id, say), [updateSlotSay]
   );
   const handleDefinition = useCallback(
-    (slotId: string) => (patch: Partial<Pick<SlotDefinition, 'label' | 'time' | 'doText'>>) => {
-      void updateSlotDefinition(slotId, patch).then(() => {
+    (id: string) => (patch: Partial<Pick<SlotDefinition, 'label' | 'time' | 'doText'>>) => {
+      void updateSlotDefinition(id, patch).then(() => {
         if (settings?.notifications) void updatePushSchedule(slots, settings.notifications);
       });
     },
     [updateSlotDefinition, slots, settings]
   );
 
-  const habitPct = slots.length > 0
-    ? Math.round((completedIds.size / slots.length) * 100)
-    : 0;
+  const habitPct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   const getCustomPanel = useCallback(
     (slotId: string): { panel: JSX.Element; label: string } | undefined => {
@@ -182,10 +207,9 @@ export function SchedulePage(): JSX.Element {
 
   return (
     <>
-      {/* ── Page wrapper ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col h-full overflow-hidden">
 
-        {/* ── Section banner ───────────────────────────────────────────────── */}
+        {/* ── Banner ───────────────────────────────────────────────────────── */}
         <div
           className="flex-shrink-0 px-4 pb-3 bg-slate-900/80 backdrop-blur-sm border-b border-slate-800"
           style={{ paddingTop: 'max(1.25rem, env(safe-area-inset-top))' }}
@@ -202,7 +226,6 @@ export function SchedulePage(): JSX.Element {
               <span className="text-[10px] text-slate-500">{completed}/{total} done</span>
             </div>
           </div>
-          {/* Progress bar */}
           <div className="h-2 bg-slate-700/60 rounded-full overflow-hidden">
             <div
               className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-700"
@@ -214,13 +237,11 @@ export function SchedulePage(): JSX.Element {
         {/* ── Scrollable path ──────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto">
           {(isLoading || tasksLoading) ? (
-            <div className="flex justify-center items-center h-40">
-              <Spinner />
-            </div>
+            <div className="flex justify-center items-center h-40"><Spinner /></div>
           ) : (
             <div ref={containerRef} className="relative mx-auto" style={{ height: svgH, maxWidth: 480 }}>
 
-              {/* ── SVG connecting path ─────────────────────────────────── */}
+              {/* SVG path */}
               <svg
                 viewBox={`0 0 ${cw} ${svgH}`}
                 width={cw}
@@ -228,16 +249,18 @@ export function SchedulePage(): JSX.Element {
                 className="absolute inset-0 pointer-events-none"
               >
                 {slots.slice(0, -1).map((slot, i) => {
-                  const x1 = cw * getXPct(i) / 100;
+                  const x1 = cw * getXPct(i)     / 100;
                   const y1 = getNodeCY(i);
                   const x2 = cw * getXPct(i + 1) / 100;
                   const y2 = getNodeCY(i + 1);
                   const bothDone = completedIds.has(slot.id) && completedIds.has(slots[i + 1].id);
+                  // Segments beyond next-due are faint
+                  const isFutureSeg = i >= nextDueIdx && nextDueIdx !== -1 && !bothDone;
                   return (
                     <path
                       key={slot.id}
                       d={buildSegment(x1, y1, x2, y2)}
-                      stroke={bothDone ? '#22c55e' : 'rgba(71,85,105,0.55)'}
+                      stroke={bothDone ? '#22c55e' : isFutureSeg ? 'rgba(55,65,81,0.6)' : 'rgba(71,85,105,0.55)'}
                       strokeWidth={bothDone ? 7 : 5}
                       fill="none"
                       strokeLinecap="round"
@@ -246,59 +269,90 @@ export function SchedulePage(): JSX.Element {
                 })}
               </svg>
 
-              {/* ── Slot nodes ───────────────────────────────────────────── */}
+              {/* Nodes */}
               {slots.map((slot, i) => {
-                const xPct   = getXPct(i);
-                const xPx    = cw * xPct / 100;
-                const yTop   = PAD_TOP + i * SLOT_SPACING;
-                const isDone = completedIds.has(slot.id);
-                const isNext = i === nextDueIdx;
-                const r      = isNext ? ACTIVE_NODE_R : NODE_R;
-                const color  = SLOT_COLORS[slot.id] ?? '#6366f1';
+                const xPct    = getXPct(i);
+                const xPx     = cw * xPct / 100;
+                const isDone  = completedIds.has(slot.id);
+                const isNext  = i === nextDueIdx;
+                const isFuture = !isDone && nextDueIdx !== -1 && i > nextDueIdx;
+                const r       = isNext ? ACTIVE_NODE_R : NODE_R;
+                const yCenter = getNodeCY(i);   // center y
+                const yTop    = yCenter - r;    // top-left corner for absolute
+                const baseColor = SLOT_COLORS[slot.id] ?? '#6366f1';
+                const { bg, shadow } = getNodeVisuals(baseColor, isDone, isFuture, isNext);
                 const labelRight = xPct >= 50;
 
                 return (
                   <div key={slot.id}>
-                    {/* Circle node */}
+                    {/* Pulsing ring — separate element behind the button */}
+                    {isNext && (
+                      <div
+                        className="pulse-ring-anim absolute rounded-full pointer-events-none"
+                        style={{
+                          left:   xPx - r - 10,
+                          top:    yTop - 10,
+                          width:  (r + 10) * 2,
+                          height: (r + 10) * 2,
+                          border: `3px solid ${baseColor}`,
+                        }}
+                      />
+                    )}
+
+                    {/* Circle button */}
                     <button
                       onClick={() => setActiveSlotId(activeSlotId === slot.id ? null : slot.id)}
                       aria-label={`${slot.label} at ${slot.time}`}
                       style={{
                         position: 'absolute',
-                        left:  xPx - r,
-                        top:   yTop + NODE_R - r,
+                        left:   xPx - r,
+                        top:    yTop,
                         width:  r * 2,
                         height: r * 2,
-                        backgroundColor: isDone ? '#22c55e' : color,
-                        boxShadow: isDone
-                          ? '0 0 0 3px rgba(34,197,94,0.3)'
-                          : isNext
-                          ? `0 0 0 4px ${color}55, 0 0 20px ${color}44`
-                          : 'none',
+                        background: bg,
+                        boxShadow: shadow,
                       }}
-                      className={`rounded-full flex items-center justify-center transition-all duration-200 shadow-lg z-10 ${
-                        isNext ? 'pulse-ring' : ''
-                      } ${
-                        activeSlotId === slot.id ? 'scale-110 ring-2 ring-white/40' : 'active:scale-95'
+                      className={`rounded-full flex items-center justify-center transition-all duration-200 z-10 ${
+                        activeSlotId === slot.id ? 'scale-110' : 'active:scale-95'
                       }`}
                     >
+                      {/* Inner gloss highlight */}
+                      <div
+                        className="absolute rounded-full pointer-events-none"
+                        style={{
+                          top: '8%', left: '18%', width: '42%', height: '30%',
+                          background: 'rgba(255,255,255,0.18)',
+                          filter: 'blur(2px)',
+                        }}
+                      />
                       {isDone ? (
-                        <Check size={r > 30 ? 22 : 18} className="text-white" strokeWidth={3} />
+                        <Check
+                          size={r > 32 ? 22 : 18}
+                          className="text-white relative z-10"
+                          strokeWidth={3}
+                        />
                       ) : (
-                        <span style={{ fontSize: r > 30 ? 22 : 18 }}>
+                        <span
+                          className="relative z-10 select-none"
+                          style={{
+                            fontSize: r > 32 ? 22 : 17,
+                            opacity: isFuture ? 0.45 : 1,
+                            filter: isFuture ? 'grayscale(1)' : 'none',
+                          }}
+                        >
                           {SLOT_ICONS[slot.id] ?? '⭐'}
                         </span>
                       )}
                     </button>
 
-                    {/* Label + time — positioned left or right of node */}
+                    {/* Label */}
                     <div
                       style={{
                         position: 'absolute',
-                        top: yTop + NODE_R - 22,
+                        top:  yCenter - 22,
                         ...(labelRight
-                          ? { right: cw - xPx + r + 10, textAlign: 'right' }
-                          : { left: xPx + r + 10,       textAlign: 'left'  }),
+                          ? { right: cw - xPx + r + 12, textAlign: 'right' }
+                          : { left:  xPx + r + 12,      textAlign: 'left'  }),
                         maxWidth: '38%',
                       }}
                     >
@@ -306,11 +360,15 @@ export function SchedulePage(): JSX.Element {
                         {slot.time}
                       </p>
                       <p className={`text-sm font-bold leading-tight ${
-                        isDone ? 'text-emerald-400' : isNext ? 'text-white' : 'text-slate-300'
+                        isFuture   ? 'text-slate-600' :
+                        isDone     ? 'text-emerald-400' :
+                        isNext     ? 'text-white' : 'text-slate-300'
                       }`}>
                         {slot.label}
                       </p>
-                      <p className="text-[10px] text-slate-500 leading-tight line-clamp-2 mt-0.5">
+                      <p className={`text-[10px] leading-tight line-clamp-2 mt-0.5 ${
+                        isFuture ? 'text-slate-700' : 'text-slate-500'
+                      }`}>
                         {slot.doText}
                       </p>
                     </div>
@@ -341,7 +399,6 @@ export function SchedulePage(): JSX.Element {
 }
 
 // ─── Bottom sheet ─────────────────────────────────────────────────────────────
-
 interface SheetProps {
   slot: SlotDefinition;
   completion?: { completed: boolean; notes: string; completedAt?: string };
@@ -358,27 +415,19 @@ function SlotDetailSheet({
   slot, completion, onToggle, onNotesChange, onSayChange,
   onDefinitionChange, customPanel, customPanelLabel, onClose,
 }: SheetProps): JSX.Element {
-  const color = (wheelConfig.habits.find((h) => h.id === slot.id)?.color) ?? '#6366f1';
+  const color = wheelConfig.habits.find((h) => h.id === slot.id)?.color ?? '#6366f1';
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
         onClick={onClose}
         aria-hidden="true"
       />
-
-      {/* Sheet panel */}
       <div className="relative bg-slate-900 rounded-t-2xl shadow-2xl max-h-[80vh] flex flex-col animate-slide-up">
-        {/* Handle + header */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-700/60 flex-shrink-0">
           <div className="flex items-center gap-2">
-            {/* Color dot */}
-            <span
-              className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ backgroundColor: color }}
-            />
+            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
             <span className="text-xs font-mono text-slate-400">{slot.time}</span>
             <span className="text-base font-bold text-slate-100">{slot.label}</span>
           </div>
@@ -390,8 +439,6 @@ function SlotDetailSheet({
             <X size={18} />
           </button>
         </div>
-
-        {/* Scrollable SlotCard content */}
         <div className="flex-1 overflow-y-auto px-3 py-3">
           <SlotCard
             slot={slot}
