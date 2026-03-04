@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { JSX } from 'react';
 import { format } from 'date-fns';
 import { X, Check } from 'lucide-react';
@@ -16,11 +16,12 @@ import type { WheelConfig } from '../types';
 const wheelConfig = wheelConfigRaw as WheelConfig;
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
-const SLOT_SPACING  = 140;   // px between node centres
-const PAD_TOP       = 24;
-const PAD_BOTTOM    = 80;
+const SLOT_SPACING  = 155;   // px between node centres (extra room for label + stars)
+const PAD_TOP       = 28;
+const PAD_BOTTOM    = 90;
 const NODE_R        = 30;
 const ACTIVE_NODE_R = 38;
+const LABEL_GAP     = 16;    // px between node edge and nearest label edge
 
 const TASK_PANEL_SLOTS = new Set(['coffee', 'water', 'meditate']);
 
@@ -304,6 +305,29 @@ export function SchedulePage(): JSX.Element {
                 const { bg, shadow } = getNodeVisuals(baseColor, isDone, isFuture, isNext, allDone);
                 const labelRight = xPct >= 50;
 
+                // Label positioning: anchor the edge of the label to the edge of
+                // the circle using `left` + optional `translateX(-100%)`.
+                // This avoids depending on `cw` for right-side labels, which
+                // could be stale on first render and cause overlap.
+                const labelPos: React.CSSProperties = labelRight
+                  ? {
+                      // right-side node → label sits LEFT of circle
+                      position: 'absolute',
+                      left: xPx - r - LABEL_GAP,
+                      top:  yCtr - 28,
+                      transform: 'translateX(-100%)',
+                      textAlign: 'right',
+                      maxWidth: '44%',
+                    }
+                  : {
+                      // left-side node → label sits RIGHT of circle
+                      position: 'absolute',
+                      left: xPx + r + LABEL_GAP,
+                      top:  yCtr - 28,
+                      textAlign: 'left',
+                      maxWidth: '44%',
+                    };
+
                 return (
                   <div key={slot.id}>
                     {/* Pulse ring for active node */}
@@ -314,7 +338,7 @@ export function SchedulePage(): JSX.Element {
                       />
                     )}
 
-                    {/* Circle */}
+                    {/* Circle — z-index 10 so it sits above the SVG path */}
                     <button
                       onClick={() => setActiveSlotId(activeSlotId === slot.id ? null : slot.id)}
                       aria-label={`${slot.label} at ${slot.time}`}
@@ -322,61 +346,48 @@ export function SchedulePage(): JSX.Element {
                         position: 'absolute', left: xPx - r, top: yTop,
                         width: r * 2, height: r * 2,
                         background: bg, boxShadow: shadow,
+                        zIndex: 10,
                       }}
-                      className={`rounded-full flex items-center justify-center transition-all duration-200 z-10 ${
+                      className={`rounded-full flex items-center justify-center transition-all duration-200 ${
                         activeSlotId === slot.id ? 'scale-110' : 'active:scale-95'
                       }`}
                     >
-                      {/* Gloss */}
-                      <div className="absolute rounded-full pointer-events-none" style={{ top: '8%', left: '18%', width: '42%', height: '30%', background: 'rgba(255,255,255,0.18)', filter: 'blur(2px)' }} />
+                      {/* Gloss highlight */}
+                      <div
+                        className="absolute rounded-full pointer-events-none"
+                        style={{ top: '8%', left: '18%', width: '42%', height: '30%', background: 'rgba(255,255,255,0.18)', filter: 'blur(2px)' }}
+                      />
                       {isDone ? (
-                        <Check size={r > 32 ? 22 : 18} className="text-white relative z-10" strokeWidth={3} />
+                        <Check size={r > 32 ? 22 : 18} className="text-white relative" strokeWidth={3} />
                       ) : (
-                        <span className="relative z-10 select-none" style={{ fontSize: r > 32 ? 22 : 17, opacity: isFuture ? 0.45 : 1, filter: isFuture ? 'grayscale(1)' : 'none' }}>
+                        <span
+                          className="relative select-none"
+                          style={{ fontSize: r > 32 ? 22 : 17, opacity: isFuture ? 0.45 : 1, filter: isFuture ? 'grayscale(1)' : 'none' }}
+                        >
                           {SLOT_ICONS[slot.id] ?? '⭐'}
                         </span>
                       )}
                     </button>
 
-                    {/* Stars below node — always shown (greyed if not earned) */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: yCtr + r + 6,
-                        left: xPx - 24,
-                        width: 48,
-                        display: 'flex',
-                        justifyContent: 'center',
-                        gap: 2,
-                      }}
-                    >
-                      {stars.map((e, si) => <StarIcon key={si} earned={e} />)}
-                    </div>
-
-                    {/* Label */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: yCtr - 22,
-                        ...(labelRight
-                          ? { right: cw - xPx + r + 12, textAlign: 'right' }
-                          : { left:  xPx + r + 12,      textAlign: 'left'  }),
-                        maxWidth: '38%',
-                      }}
-                    >
-                      <p className="text-[10px] font-mono text-slate-500 leading-none mb-0.5">{slot.time}</p>
+                    {/* Label + stars — positioned to the side, never behind the circle */}
+                    <div style={labelPos}>
+                      <p className="text-[10px] font-mono text-slate-500 leading-none mb-0.5">
+                        {slot.time}
+                      </p>
                       <p className={`text-sm font-bold leading-tight ${
                         isFuture ? 'text-slate-600' : isDone ? 'text-emerald-400' : isNext ? 'text-white' : 'text-slate-300'
-                      }`}>{slot.label}</p>
-                      <p className={`text-[10px] leading-tight line-clamp-2 mt-0.5 ${isFuture ? 'text-slate-700' : 'text-slate-500'}`}>
+                      }`}>
+                        {slot.label}
+                      </p>
+                      <p className={`text-[10px] leading-tight line-clamp-2 mt-0.5 ${
+                        isFuture ? 'text-slate-700' : 'text-slate-500'
+                      }`}>
                         {slot.doText}
                       </p>
-                      {/* Earned star count hint */}
-                      {earned > 0 && (
-                        <p className={`text-[10px] font-semibold mt-0.5 ${allDone ? 'text-amber-400' : 'text-slate-500'}`}>
-                          {allDone ? '★ Perfect' : `${earned}/3 ★`}
-                        </p>
-                      )}
+                      {/* Stars row — lives in the label, not below the circle */}
+                      <div className={`flex gap-0.5 mt-1.5 ${labelRight ? 'justify-end' : 'justify-start'}`}>
+                        {stars.map((e, si) => <StarIcon key={si} earned={e} />)}
+                      </div>
                     </div>
                   </div>
                 );
