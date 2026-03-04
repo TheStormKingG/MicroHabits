@@ -44,8 +44,11 @@ function AppInner(): JSX.Element {
 }
 
 export default function App(): JSX.Element {
+  // import.meta.env.BASE_URL is '/MicroHabits/' in production, '/' in dev.
+  // BrowserRouter needs this so all routes resolve correctly under the sub-path.
+  const basename = import.meta.env.BASE_URL;
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <ErrorBoundary>
         <AuthProvider>
           <ScheduleProvider>

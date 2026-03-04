@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>MicroHabits</title>
+  <script>
+    // GitHub Pages SPA redirect: preserve the path and query so React Router
+    // can handle them after the app loads.
+    // Only applies to paths under /MicroHabits/
+    var l = window.location;
+    var base = '/MicroHabits/';
+    var path = l.pathname.slice(base.length);
+    var redirect = base + '?p=' + encodeURIComponent(path) + (l.search ? '&q=' + encodeURIComponent(l.search.slice(1)) : '') + l.hash;
+    l.replace(redirect);
+  </script>
+</head>
+<body></body>
+</html>
