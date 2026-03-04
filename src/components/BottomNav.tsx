@@ -77,7 +77,8 @@ export function BottomNav(): JSX.Element {
       }}
       className="fixed bottom-0 left-0 right-0 z-50"
     >
-      <div className="flex justify-center items-center gap-5 h-16 max-w-lg mx-auto px-4">
+      {/* Fixed-height icon row — safe-area padding is outside this div so icons stay centred */}
+      <div className="flex justify-center items-center gap-5 max-w-lg mx-auto px-4" style={{ height: 64 }}>
         {TABS.map(({ to, label }) => (
           <NavLink
             key={to}
