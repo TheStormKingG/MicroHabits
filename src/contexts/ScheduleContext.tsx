@@ -27,8 +27,11 @@ interface ScheduleContextValue {
   toggleSlotSay: (slotId: string) => Promise<void>;
   updateSlotNotes: (slotId: string, notes: string) => Promise<void>;
   updateSlotSay: (slotId: string, say: [string, string, string]) => Promise<void>;
-  /** Update label, time, and/or doText of a slot. */
   updateSlotDefinition: (slotId: string, patch: Partial<Pick<SlotDefinition, 'label' | 'time' | 'doText'>>) => Promise<void>;
+  /** Add a brand-new custom habit slot (sorted by time). */
+  addSlot: (slot: SlotDefinition) => Promise<void>;
+  /** Remove a custom (non-default) slot; no-op for built-in slots. */
+  removeSlot: (slotId: string) => Promise<void>;
   updateSettings: (settings: AppSettings) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -43,12 +46,14 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }): J
   const today = useRef(todayISO());
 
   const slots = useMemo<SlotDefinition[]>(() => {
-    if (!settings) return defaultSchedule;
-    const custom = settings.customSlots;
-    if (!custom || custom.length === 0) return defaultSchedule;
-    // Merge: custom overrides default by id
-    const customMap = new Map(custom.map((s) => [s.id, s]));
-    return defaultSchedule.map((s) => customMap.get(s.id) ?? s);
+    const custom = settings?.customSlots ?? [];
+    const customMap  = new Map(custom.map((s) => [s.id, s]));
+    const defaultIds = new Set(defaultSchedule.map((s) => s.id));
+    // Replace defaults with custom overrides
+    const merged = defaultSchedule.map((s) => customMap.get(s.id) ?? s);
+    // Append brand-new custom slots not in the default set, sorted by time
+    const extras = custom.filter((s) => !defaultIds.has(s.id));
+    return [...merged, ...extras].sort((a, b) => a.time.localeCompare(b.time));
   }, [settings]);
 
   const ensureDayRecord = useCallback(
@@ -192,6 +197,32 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }): J
     [settings, user]
   );
 
+  const addSlot = useCallback(
+    async (slot: SlotDefinition) => {
+      if (!settings) return;
+      const customSlots = [...settings.customSlots.filter((s) => s.id !== slot.id), slot];
+      const newSettings: AppSettings = { ...settings, customSlots };
+      setSettings(newSettings);
+      await saveSettings(newSettings);
+      if (user) void pushSettings(user.id, newSettings);
+    },
+    [settings, user]
+  );
+
+  const removeSlot = useCallback(
+    async (slotId: string) => {
+      if (!settings) return;
+      const isDefault = defaultSchedule.some((s) => s.id === slotId);
+      if (isDefault) return; // built-in slots cannot be removed
+      const customSlots = settings.customSlots.filter((s) => s.id !== slotId);
+      const newSettings: AppSettings = { ...settings, customSlots };
+      setSettings(newSettings);
+      await saveSettings(newSettings);
+      if (user) void pushSettings(user.id, newSettings);
+    },
+    [settings, user]
+  );
+
   const updateSettings = useCallback(async (newSettings: AppSettings) => {
     setSettings(newSettings);
     await saveSettings(newSettings);
@@ -209,10 +240,12 @@ export function ScheduleProvider({ children }: { children: React.ReactNode }): J
       updateSlotNotes,
       updateSlotSay,
       updateSlotDefinition,
+      addSlot,
+      removeSlot,
       updateSettings,
       refresh: load,
     }),
-    [slots, dayRecord, settings, isLoading, toggleSlot, toggleSlotSay, updateSlotNotes, updateSlotSay, updateSlotDefinition, updateSettings, load]
+    [slots, dayRecord, settings, isLoading, toggleSlot, toggleSlotSay, updateSlotNotes, updateSlotSay, updateSlotDefinition, addSlot, removeSlot, updateSettings, load]
   );
 
   return <ScheduleContext.Provider value={value}>{children}</ScheduleContext.Provider>;

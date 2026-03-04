@@ -180,6 +180,12 @@ export function SlotCard({
               </div>
               <p className="text-xs text-slate-400 mt-0.5 leading-snug">{slot.doText}</p>
               {/* Star row — always visible */}
+              {/* completedAt badge */}
+              {isDone && completion?.completedAt && (
+                <p className="text-[10px] text-emerald-500/80 font-medium mt-0.5">
+                  ✓ Completed {formatCompletedAt(completion.completedAt)}
+                </p>
+              )}
               <div className="flex items-center gap-1 mt-1.5">
                 {stars.map((earned, i) => <Star key={i} earned={earned} />)}
                 <span className={`text-[10px] ml-1 font-semibold ${
@@ -326,4 +332,14 @@ export function SlotCard({
       )}
     </article>
   );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function formatCompletedAt(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(iso));
+  } catch {
+    return '';
+  }
 }

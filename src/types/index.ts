@@ -102,6 +102,18 @@ export interface AppSettings {
   theme: 'dark' | 'light';
 }
 
+// ─── Streaks ─────────────────────────────────────────────────────────────────
+
+export interface StreakData {
+  day:      number;   // consecutive 100%-complete days ending today
+  week:     number;   // floor(day / 7)
+  month:    number;   // floor(day / 30)
+  quarter:  number;   // floor(day / 91)
+  halfYear: number;   // floor(day / 182)
+  year:     number;   // floor(day / 365)
+  bestItemStreak: { label: string; days: number } | null;
+}
+
 // ─── Export Envelope ─────────────────────────────────────────────────────────
 
 export interface ExportEnvelope {

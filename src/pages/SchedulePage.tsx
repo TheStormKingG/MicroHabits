@@ -1,17 +1,24 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { JSX } from 'react';
 import { format } from 'date-fns';
-import { X, Check } from 'lucide-react';
+import { X, Check, Plus, Trash2 } from 'lucide-react';
 import { useSchedule } from '../contexts/ScheduleContext';
 import { useTasks } from '../contexts/TasksContext';
 import { SlotCard } from '../components/SlotCard';
 import { Spinner } from '../components/Spinner';
 import { TaskList, EveningReviewPanel } from '../components/TaskList';
+import { AddSlotModal } from '../components/AddSlotModal';
 import { updatePushSchedule } from '../lib/pushService';
 import { getSlotStars, starCount } from '../utils/stars';
 import type { SlotDefinition } from '../types';
 import wheelConfigRaw from '../data/wheel_config.json';
 import type { WheelConfig } from '../types';
+
+// IDs that are part of the built-in default schedule
+const DEFAULT_SLOT_IDS = new Set([
+  'wake','brush','coffee','car1','park1','keynaan','car2','park2',
+  'car3','ebrf','yard','read','water','meditate','sleep',
+]);
 
 const wheelConfig = wheelConfigRaw as WheelConfig;
 
@@ -98,7 +105,9 @@ export function SchedulePage(): JSX.Element {
   const {
     slots, dayRecord, settings, isLoading,
     toggleSlot, toggleSlotSay, updateSlotNotes, updateSlotSay, updateSlotDefinition,
+    addSlot, removeSlot,
   } = useSchedule();
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const {
     todayRecord, tomorrowRecord, isLoading: tasksLoading,
@@ -410,7 +419,29 @@ export function SchedulePage(): JSX.Element {
           onDefinitionChange={handleDefinition(activeSlot.id)}
           customPanel={getCustomPanel(activeSlot.id)?.panel}
           customPanelLabel={getCustomPanel(activeSlot.id)?.label}
+          isCustomSlot={!DEFAULT_SLOT_IDS.has(activeSlot.id)}
+          onDeleteSlot={async () => {
+            await removeSlot(activeSlot.id);
+            setActiveSlotId(null);
+          }}
           onClose={() => setActiveSlotId(null)}
+        />
+      )}
+
+      {/* FAB — add new habit slot */}
+      <button
+        onClick={() => setShowAddModal(true)}
+        aria-label="Add new habit slot"
+        className="fixed z-40 right-4 flex items-center justify-center w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 active:scale-95 shadow-lg shadow-indigo-900/50 transition-all"
+        style={{ bottom: 'calc(72px + env(safe-area-inset-bottom) + 12px)' }}
+      >
+        <Plus size={22} className="text-white" />
+      </button>
+
+      {showAddModal && (
+        <AddSlotModal
+          onSave={(slot) => { void addSlot(slot); }}
+          onClose={() => setShowAddModal(false)}
         />
       )}
     </>
@@ -422,6 +453,7 @@ interface SheetProps {
   slot: SlotDefinition;
   completion?: { completed: boolean; sayDone: boolean; notes: string; completedAt?: string };
   stars?: [boolean, boolean, boolean];
+  isCustomSlot?: boolean;
   onToggle: () => void;
   onSayDone?: () => void;
   onNotesChange?: (notes: string) => void;
@@ -429,31 +461,88 @@ interface SheetProps {
   onDefinitionChange?: (patch: Partial<Pick<SlotDefinition, 'label' | 'time' | 'doText'>>) => void;
   customPanel?: JSX.Element;
   customPanelLabel?: string;
+  onDeleteSlot?: () => void;
   onClose: () => void;
 }
 
 function SlotDetailSheet({
-  slot, completion, stars, onToggle, onSayDone, onNotesChange, onSayChange,
-  onDefinitionChange, customPanel, customPanelLabel, onClose,
+  slot, completion, stars, isCustomSlot, onToggle, onSayDone, onNotesChange, onSayChange,
+  onDefinitionChange, customPanel, customPanelLabel, onDeleteSlot, onClose,
 }: SheetProps): JSX.Element {
   const color = wheelConfig.habits.find((h) => h.id === slot.id)?.color ?? '#6366f1';
+
+  // Prevent background scroll on iOS while sheet is open
+  useEffect(() => {
+    const scrollY = window.scrollY;
+    document.body.style.overflow  = 'hidden';
+    document.body.style.position  = 'fixed';
+    document.body.style.top       = `-${scrollY}px`;
+    document.body.style.width     = '100%';
+    return () => {
+      document.body.style.overflow  = '';
+      document.body.style.position  = '';
+      const t = document.body.style.top;
+      document.body.style.top       = '';
+      window.scrollTo(0, parseInt(t || '0') * -1);
+    };
+  }, []);
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
-      <div className="relative bg-slate-900 rounded-t-2xl shadow-2xl max-h-[82vh] flex flex-col animate-slide-up">
+      <div
+        className="relative bg-slate-900 rounded-t-2xl shadow-2xl flex flex-col animate-slide-up"
+        style={{ maxHeight: '88dvh' }}
+      >
         {/* Sheet header */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-700/60 flex-shrink-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
             <span className="text-xs font-mono text-slate-400">{slot.time}</span>
-            <span className="text-base font-bold text-slate-100">{slot.label}</span>
+            <span className="text-base font-bold text-slate-100 truncate">{slot.label}</span>
           </div>
-          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-full text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 transition-colors">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {isCustomSlot && (
+              confirmDelete ? (
+                <>
+                  <button
+                    onClick={() => onDeleteSlot?.()}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-red-600 hover:bg-red-500 text-white transition-colors"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  aria-label="Delete slot"
+                  className="p-1.5 rounded-full text-red-500/70 hover:text-red-400 hover:bg-red-900/30 transition-colors"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )
+            )}
+            <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-full text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 transition-colors">
+              <X size={18} />
+            </button>
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-3 py-3">
+        {/* Scrollable content — key fix for iOS */}
+        <div
+          className="flex-1 overflow-y-auto px-3 py-3"
+          style={{
+            WebkitOverflowScrolling: 'touch' as unknown as undefined,
+            overscrollBehavior: 'contain',
+          }}
+        >
           <SlotCard
             slot={slot}
             completion={completion}
