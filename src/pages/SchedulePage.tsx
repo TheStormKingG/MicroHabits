@@ -490,14 +490,21 @@ function SlotDetailSheet({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
+    <div className="fixed inset-0 z-50 flex flex-col">
       <div
-        className="relative bg-slate-900 rounded-t-2xl shadow-2xl flex flex-col animate-slide-up"
-        style={{ maxHeight: '88dvh' }}
+        className="relative bg-slate-900 flex flex-col flex-1 animate-slide-up"
+        style={{
+          paddingTop:    'env(safe-area-inset-top)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        }}
       >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-2 pb-0 flex-shrink-0">
+          <div className="w-10 h-1 bg-slate-600/80 rounded-full" />
+        </div>
+
         {/* Sheet header */}
-        <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-700/60 flex-shrink-0">
+        <div className="flex items-center justify-between px-4 pt-2 pb-2 border-b border-slate-700/60 flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
             <span className="text-xs font-mono text-slate-400">{slot.time}</span>
@@ -535,9 +542,9 @@ function SlotDetailSheet({
             </button>
           </div>
         </div>
-        {/* Scrollable content — key fix for iOS */}
+        {/* Full-height content — flex column so SlotCard can grow to fill screen */}
         <div
-          className="flex-1 overflow-y-auto px-3 py-3"
+          className="flex-1 flex flex-col px-3 pt-2 pb-3 min-h-0"
           style={{
             WebkitOverflowScrolling: 'touch' as unknown as undefined,
             overscrollBehavior: 'contain',
@@ -555,6 +562,7 @@ function SlotDetailSheet({
             customPanel={customPanel}
             customPanelLabel={customPanelLabel}
             defaultExpanded
+            fillHeight
           />
         </div>
       </div>

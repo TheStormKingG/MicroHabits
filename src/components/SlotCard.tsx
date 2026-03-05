@@ -18,6 +18,11 @@ interface Props {
   customPanelLabel?: string;
   defaultExpanded?: boolean;
   /**
+   * When true the card participates in a flex column layout so the notes
+   * textarea can grow to fill all remaining vertical space.
+   */
+  fillHeight?: boolean;
+  /**
    * Pre-computed star tuple [do, say, bonus].
    * Bonus (star 3) depends on external data so it must be supplied by the parent.
    * If omitted, star 3 is derived from notes word-count locally.
@@ -83,6 +88,7 @@ export function SlotCard({
   customPanel,
   customPanelLabel,
   defaultExpanded = false,
+  fillHeight = false,
   stars: starsProp,
 }: Props): JSX.Element {
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -112,13 +118,13 @@ export function SlotCard({
 
   return (
     <article
-      className={`rounded-xl border transition-all duration-200 ${
-        earnedCount === 3
-          ? 'bg-amber-950/20 border-amber-700/30'
-          : isDone
-          ? 'bg-green-950/30 border-green-700/40'
-          : 'bg-slate-800/60 border-slate-700/50'
-      }`}
+      className={[
+        'rounded-xl border transition-all duration-200',
+        earnedCount === 3 ? 'bg-amber-950/20 border-amber-700/30'
+          : isDone        ? 'bg-green-950/30 border-green-700/40'
+                          : 'bg-slate-800/60 border-slate-700/50',
+        fillHeight ? 'flex flex-col flex-1 min-h-0' : '',
+      ].join(' ')}
       aria-label={`${slot.label} at ${slot.time}`}
     >
       {/* ── Header ── */}
@@ -213,7 +219,10 @@ export function SlotCard({
 
       {/* ── Expanded body ── */}
       {expanded && !editingDef && (
-        <div className="px-3 pb-3 space-y-4 border-t border-slate-700/50 pt-3">
+        <div className={[
+          'px-3 pb-3 border-t border-slate-700/50 pt-3',
+          fillHeight ? 'flex flex-col flex-1 min-h-0 gap-4' : 'space-y-4',
+        ].join(' ')}>
 
           {/* ── DO section ── */}
           <section aria-label="Do section">
@@ -289,18 +298,26 @@ export function SlotCard({
 
           {/* ── NOTES / TASKS section ── */}
           {customPanel ? (
-            <section aria-label={customPanelLabel ?? 'Task panel'}>
-              <div className="flex items-center gap-2 mb-2">
+            <section
+              aria-label={customPanelLabel ?? 'Task panel'}
+              className={fillHeight ? 'flex flex-col flex-1 min-h-0' : ''}
+            >
+              <div className="flex items-center gap-2 mb-2 flex-shrink-0">
                 <Star earned={stars[2]} />
                 <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                   {customPanelLabel ?? 'Tasks'}
                 </h3>
               </div>
-              {customPanel}
+              <div className={fillHeight ? 'flex flex-col flex-1 min-h-0 overflow-y-auto' : ''}>
+                {customPanel}
+              </div>
             </section>
           ) : (
-            <section aria-label="Notes">
-              <div className="flex items-center justify-between mb-1.5">
+            <section
+              aria-label="Notes"
+              className={fillHeight ? 'flex flex-col flex-1 min-h-0' : ''}
+            >
+              <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <Star earned={stars[2]} />
                   <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Notes</h3>
@@ -316,11 +333,14 @@ export function SlotCard({
                 value={notes}
                 onChange={(e) => onNotesChange?.(e.target.value)}
                 placeholder={`Write a reflection (${NOTES_WORD_GOAL}+ words to earn ⭐)…`}
-                rows={3}
-                className="w-full text-xs bg-slate-700/60 border border-slate-600 rounded-md px-2.5 py-2 text-slate-200 placeholder-slate-500 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                rows={fillHeight ? undefined : 5}
+                className={[
+                  'w-full text-sm bg-slate-700/60 border border-slate-600 rounded-xl px-3 py-2.5 text-slate-200 placeholder-slate-500 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500',
+                  fillHeight ? 'flex-1 min-h-0' : '',
+                ].join(' ')}
               />
               {/* Word progress bar */}
-              <div className="mt-1 h-1 bg-slate-700/60 rounded-full overflow-hidden">
+              <div className="mt-2 h-1.5 bg-slate-700/60 rounded-full overflow-hidden flex-shrink-0">
                 <div
                   className={`h-full rounded-full transition-all duration-300 ${wordCount > NOTES_WORD_GOAL ? 'bg-amber-400' : 'bg-slate-500'}`}
                   style={{ width: `${Math.min(100, (wordCount / (NOTES_WORD_GOAL + 1)) * 100)}%` }}
