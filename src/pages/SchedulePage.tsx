@@ -495,7 +495,7 @@ function SlotDetailSheet({
         className="relative bg-slate-900 flex flex-col flex-1 animate-slide-up"
         style={{
           paddingTop:    'env(safe-area-inset-top)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
+          paddingBottom: 'calc(64px + env(safe-area-inset-bottom))',
         }}
       >
         {/* Drag handle */}
